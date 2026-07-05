@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -9,15 +9,10 @@ import {
   createInitialGameState,
   applyRoll,
   advanceTurn,
-  rollDice,
   BOARD_CONFIGS,
 } from "@/lib/game-engine";
-import type { BoardMode, GameState, PlayerState } from "@/lib/game-engine";
-import {
-  ArrowLeft,
-  RefreshCw,
-  ScrollText,
-} from "lucide-react";
+import type { BoardMode, GameState } from "@/lib/game-engine";
+import { ArrowLeft, RefreshCw, ScrollText } from "lucide-react";
 
 interface LocationState {
   boardMode: BoardMode;
@@ -29,7 +24,6 @@ export default function GamePlay() {
   const navigate = useNavigate();
   const state = location.state as LocationState | null;
 
-  // Redirect if no state
   if (!state) {
     navigate("/game/setup", { replace: true });
     return null;
@@ -37,6 +31,8 @@ export default function GamePlay() {
 
   return <GamePlayInner {...state} />;
 }
+
+const TILE_STEP_DELAY = 60; // ms between each tile step during animation
 
 function GamePlayInner({
   boardMode,
@@ -50,50 +46,127 @@ function GamePlayInner({
   const [isResolving, setIsResolving] = useState(false);
   const [showMoveLog, setShowMoveLog] = useState(false);
   const [highlightedTile, setHighlightedTile] = useState<number | null>(null);
+  // For tile-by-tile animation: store the in-flight intermediate positions
+  const [animatingPlayer, setAnimatingPlayer] = useState<{
+    playerIndex: number;
+    from: number;
+    to: number;
+    currentStep: number;
+  } | null>(null);
+  const animTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
   const isGameOver = gameState.status === "game_over";
-  const winner = gameState.players.find(
-    (p) => p.id === gameState.winnerId,
-  );
-
-  // Check if current player gets an extra roll (rolled a 6)
+  const winner = gameState.players.find((p) => p.id === gameState.winnerId);
   const isExtraRoll = gameState.turnPhase === "extra_roll";
+
+  // Update the animated tile position as we step through
+  const [animatedPositions, setAnimatedPositions] = useState<
+    Record<string, number>
+  >({});
+
+  // Cleanup running timeouts/intervals on unmount
+  useEffect(() => {
+    return () => {
+      if (animTimeoutRef.current) {
+        clearTimeout(animTimeoutRef.current);
+        clearInterval(animTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleRoll = useCallback(
     (roll: number) => {
       if (isResolving || isGameOver) return;
-
       setIsResolving(true);
       setLastRollValue(roll);
 
-      // Apply the roll
       const afterRoll = applyRoll(gameState, roll);
-
-      // Check if a snake or ladder was landed on for highlighting
       const player = gameState.players[gameState.currentPlayerIndex];
-      const newPos = player.position + roll;
-      if (newPos <= 100) {
-        setHighlightedTile(newPos);
-        setTimeout(() => setHighlightedTile(null), 800);
+      const rawNewPos = player.position + roll;
+      const didOvershoot = rawNewPos > 100;
+      // The actual final position from the engine (accounts for snakes/ladders)
+      const finalPos = afterRoll.players[gameState.currentPlayerIndex].position;
+      // The landing tile before snake/ladder resolution
+      const landingTile = didOvershoot ? player.position : Math.min(rawNewPos, 100);
+
+      // Highlight the landing tile
+      if (!didOvershoot && landingTile <= 100) {
+        setHighlightedTile(landingTile);
+        setTimeout(() => setHighlightedTile(null), 1200);
       }
 
-      // Short delay for animation
-      setTimeout(() => {
-        if (afterRoll.status === "game_over") {
-          setGameState(afterRoll);
+      // Animate stepping tile-by-tile from current position to landing tile
+      const fromPos = player.position;
+      const tilesToStep = landingTile - fromPos;
+
+      if (tilesToStep > 0 && !didOvershoot) {
+        setAnimatingPlayer({
+          playerIndex: gameState.currentPlayerIndex,
+          from: fromPos,
+          to: landingTile,
+          currentStep: fromPos,
+        });
+
+        let step = 1;
+        const stepInterval = setInterval(() => {
+          const steppedPos = fromPos + step;
+          setAnimatedPositions((prev) => ({
+            ...prev,
+            [player.id]: steppedPos,
+          }));
+          step++;
+
+          if (steppedPos >= landingTile) {
+            clearInterval(stepInterval);
+
+            // After stepping animation completes, apply final state after delay for snake/ladder highlight
+            const finalizeTimeout = setTimeout(() => {
+              // If snake or ladder, show final position
+              if (finalPos !== landingTile) {
+                setAnimatedPositions((prev) => ({
+                  ...prev,
+                  [player.id]: finalPos,
+                }));
+                setHighlightedTile(finalPos);
+                // Clear the snake/ladder highlight after a moment
+                setTimeout(() => setHighlightedTile(null), 800);
+              }
+
+              // Finalize the turn
+              const resolveTimeout = setTimeout(() => {
+                setAnimatingPlayer(null);
+                if (afterRoll.status === "game_over") {
+                  setGameState(afterRoll);
+                } else if (afterRoll.turnPhase === "extra_roll") {
+                  setGameState(afterRoll);
+                } else {
+                  setGameState(advanceTurn(afterRoll));
+                }
+                setIsResolving(false);
+                setAnimatedPositions({});
+              }, finalPos !== landingTile ? 500 : 0);
+              animTimeoutRef.current = resolveTimeout;
+            }, 500);
+            animTimeoutRef.current = finalizeTimeout;
+          }
+        }, TILE_STEP_DELAY);
+        animTimeoutRef.current = stepInterval;
+      } else {
+        // Overshoot or zero-step — just apply immediately after a brief pause
+        const resolveTimeout = setTimeout(() => {
+          if (afterRoll.status === "game_over") {
+            setGameState(afterRoll);
+          } else if (afterRoll.turnPhase === "extra_roll") {
+            setGameState(afterRoll);
+          } else {
+            setGameState(advanceTurn(afterRoll));
+          }
           setIsResolving(false);
-        } else if (afterRoll.turnPhase === "extra_roll") {
-          setGameState(afterRoll);
-          setIsResolving(false);
-        } else {
-          // Advance to next player
-          const nextState = advanceTurn(afterRoll);
-          setGameState(nextState);
-          setIsResolving(false);
-        }
-      }, 600);
+        }, 500);
+        animTimeoutRef.current = resolveTimeout;
+      }
     },
     [gameState, isResolving, isGameOver],
   );
@@ -103,16 +176,27 @@ function GamePlayInner({
     setLastRollValue(null);
     setIsResolving(false);
     setHighlightedTile(null);
+    setAnimatingPlayer(null);
+    setAnimatedPositions({});
   };
 
   const handleNewGame = () => {
     navigate("/game/setup");
   };
 
-  // Auto-scroll move log
-  if (logEndRef.current) {
-    logEndRef.current.scrollIntoView({ behavior: "smooth" });
-  }
+  // Derive display positions: use animated positions during a move, otherwise game state
+  const displayPlayers = gameState.players.map((p) => {
+    const animPos = animatedPositions[p.id];
+    return {
+      ...p,
+      position: animPos !== undefined ? animPos : p.position,
+    };
+  });
+
+  // Auto-scroll move log when new entries are added
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [gameState.moveLog.length]);
 
   return (
     <motion.div
@@ -120,7 +204,6 @@ function GamePlayInner({
       animate={{ opacity: 1 }}
       className="min-h-screen bg-gradient-to-b from-background to-secondary/20"
     >
-      {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
@@ -136,8 +219,11 @@ function GamePlayInner({
                 {BOARD_CONFIGS[boardMode].name}
               </h1>
               <p className="text-[11px] text-muted-foreground">
-                Turn {gameState.moveLog.length > 0
-                  ? Math.ceil(gameState.moveLog.length / gameState.players.length)
+                Turn{" "}
+                {gameState.moveLog.length > 0
+                  ? Math.ceil(
+                      gameState.moveLog.length / gameState.players.length,
+                    )
                   : 1}
               </p>
             </div>
@@ -152,11 +238,7 @@ function GamePlayInner({
               <ScrollText className="h-4 w-4" />
             </Button>
             {isGameOver && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNewGame}
-              >
+              <Button variant="outline" size="sm" onClick={handleNewGame}>
                 <RefreshCw className="mr-1 h-3 w-3" />
                 New
               </Button>
@@ -206,11 +288,11 @@ function GamePlayInner({
           )}
         </AnimatePresence>
 
-        {/* Board */}
+        {/* Board with display players (may have animated positions) */}
         <div className="flex justify-center">
           <Board
             boardId={boardMode}
-            players={gameState.players}
+            players={displayPlayers}
             highlightedTile={highlightedTile}
             className="max-w-[420px] w-full"
           />
@@ -219,7 +301,6 @@ function GamePlayInner({
         {/* Player indicator & dice area */}
         {!isGameOver && (
           <div className="space-y-4">
-            {/* Current player banner */}
             <motion.div
               key={currentPlayer?.id + gameState.turnPhase}
               initial={{ opacity: 0, y: 10 }}
@@ -247,15 +328,14 @@ function GamePlayInner({
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Position: {currentPlayer?.position || 0}
-                    {lastRollValue !== null &&
-                      !isGameOver && (
-                        <span className="ml-2">
-                          · Last roll:{" "}
-                          <span className="font-mono font-bold">
-                            {lastRollValue}
-                          </span>
+                    {lastRollValue !== null && (
+                      <span className="ml-2">
+                        · Last roll:{" "}
+                        <span className="font-mono font-bold">
+                          {lastRollValue}
                         </span>
-                      )}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -263,13 +343,10 @@ function GamePlayInner({
                 <p className="text-2xl font-bold font-mono">
                   {currentPlayer?.position || 0}
                 </p>
-                <p className="text-[10px] text-muted-foreground">
-                  / 100
-                </p>
+                <p className="text-[10px] text-muted-foreground">/ 100</p>
               </div>
             </motion.div>
 
-            {/* Dice roll area */}
             <div className="flex flex-col items-center py-2">
               <DiceRoll
                 onRoll={handleRoll}
@@ -278,7 +355,11 @@ function GamePlayInner({
                 isExtraRoll={isExtraRoll}
               />
               <p className="text-xs text-muted-foreground mt-2">
-                Tap the dice to roll
+                {isResolving
+                  ? animatingPlayer
+                    ? "Moving piece..."
+                    : "Resolving..."
+                  : "Tap the dice to roll"}
               </p>
             </div>
           </div>
@@ -289,8 +370,9 @@ function GamePlayInner({
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             All Players
           </p>
-          {gameState.players.map((player, idx) => {
-            const isCurrent = idx === gameState.currentPlayerIndex && !isGameOver;
+          {displayPlayers.map((player, idx) => {
+            const isCurrent =
+              idx === gameState.currentPlayerIndex && !isGameOver;
             return (
               <div
                 key={player.id}
@@ -321,7 +403,6 @@ function GamePlayInner({
                   <span className="text-sm font-semibold font-mono">
                     {player.position}
                   </span>
-                  {/* Progress bar */}
                   <div className="w-16 h-1.5 rounded-full bg-secondary overflow-hidden">
                     <motion.div
                       className="h-full rounded-full"

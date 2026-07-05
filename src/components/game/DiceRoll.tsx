@@ -27,23 +27,24 @@ export function DiceRoll({
 }: DiceRollProps) {
   const [rolling, setRolling] = useState(false);
   const [lastValue, setLastValue] = useState<number | null>(null);
+  const [facesKey, setFacesKey] = useState(0);
 
   const handleRoll = async () => {
     if (disabled || rolling) return;
     setRolling(true);
+    setFacesKey((k) => k + 1);
 
-    // Animate for a moment with a few random flips
-    const flipCount = 3 + Math.floor(Math.random() * 3);
+    // Animated tumble — rapid random flips with 3D rotation timing
+    const flipCount = 4 + Math.floor(Math.random() * 4);
     for (let i = 0; i < flipCount; i++) {
-      await new Promise((r) => setTimeout(r, 80 + i * 40));
+      await new Promise((r) => setTimeout(r, 60 + i * 30));
       setLastValue(Math.floor(Math.random() * 6) + 1);
     }
 
-    // Final value
+    // Final roll
     const finalValue = Math.floor(Math.random() * 6) + 1;
     setLastValue(finalValue);
-    await new Promise((r) => setTimeout(r, 150));
-
+    await new Promise((r) => setTimeout(r, 200));
     setRolling(false);
     onRoll(finalValue);
   };
@@ -55,38 +56,65 @@ export function DiceRoll({
       <motion.button
         onClick={handleRoll}
         disabled={disabled || rolling}
-        whileTap={rolling ? {} : { scale: 0.95 }}
         className={cn(
           "relative w-20 h-20 rounded-xl shadow-lg cursor-pointer select-none",
           "border-2 transition-colors duration-200",
           disabled
             ? "opacity-50 cursor-not-allowed"
             : "hover:shadow-xl active:shadow-md",
-          rolling ? "animate-bounce" : "",
         )}
         style={{
           backgroundColor: "#fafaf9",
           borderColor: currentPlayerColor,
-          boxShadow: rolling
-            ? `0 0 20px ${currentPlayerColor}40`
-            : `0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)`,
         }}
+        // 3D tumble animation during roll
+        animate={
+          rolling
+            ? {
+                rotateX: [0, 360, 720, 1080],
+                rotateY: [0, 180, 540, 720],
+                scale: [1, 1.08, 1.05, 1],
+                boxShadow: [
+                  `0 4px 6px -1px rgb(0 0 0 / 0.1)`,
+                  `0 0 24px ${currentPlayerColor}60`,
+                  `0 0 16px ${currentPlayerColor}40`,
+                  `0 4px 6px -1px rgb(0 0 0 / 0.1)`,
+                ],
+              }
+            : {
+                rotateX: 0,
+                rotateY: 0,
+                scale: 1,
+              }
+        }
+        transition={
+          rolling
+            ? {
+                duration: 0.8,
+                ease: "easeInOut",
+                times: [0, 0.3, 0.6, 1],
+              }
+            : { duration: 0.3 }
+        }
+        whileTap={rolling ? {} : { scale: 0.92 }}
       >
         {/* Dice dots */}
-        <div className="absolute inset-2 grid grid-cols-3 grid-rows-3 gap-1">
+        <div
+          className="absolute inset-2 grid grid-cols-3 grid-rows-3 gap-1"
+          style={{ perspective: 200 }}
+        >
           {Array.from({ length: 9 }).map((_, i) => {
             const row = Math.floor(i / 3) + 1;
             const col = (i % 3) * 2 + 2;
             const hasDot = pips.some(([r, c]) => r === row && c === col);
             return (
-              <div
-                key={i}
-                className="flex items-center justify-center"
-              >
+              <div key={i} className="flex items-center justify-center">
                 {hasDot && (
                   <motion.div
+                    key={`${facesKey}-${i}`}
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 12 }}
                     className="w-3 h-3 rounded-full"
                     style={{
                       backgroundColor: rolling ? "#a1a1aa" : "#1c1917",
@@ -98,13 +126,16 @@ export function DiceRoll({
           })}
         </div>
 
-        {/* Glow ring when rolling */}
+        {/* Shine / glow during roll */}
         {rolling && (
           <motion.div
             className="absolute inset-0 rounded-xl"
-            style={{ boxShadow: `inset 0 0 20px ${currentPlayerColor}60` }}
-            animate={{ opacity: [0.3, 0.8, 0.3] }}
-            transition={{ duration: 0.6, repeat: Infinity }}
+            style={{
+              background:
+                "linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.4) 50%, transparent 60%)",
+            }}
+            animate={{ x: ["-100%", "100%"] }}
+            transition={{ duration: 0.4, repeat: Infinity, ease: "linear" }}
           />
         )}
       </motion.button>

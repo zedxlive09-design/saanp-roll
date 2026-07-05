@@ -5,7 +5,7 @@ import {
   advanceTurn,
   rollDice,
 } from "../index";
-import type { GameState, PlayerState } from "../types";
+import type { GameState } from "../types";
 
 const testPlayers = [
   { id: "p1", name: "Alice", color: "#dc2626" },
@@ -13,38 +13,15 @@ const testPlayers = [
   { id: "p3", name: "Charlie", color: "#16a34a" },
 ];
 
-function makePlayerState(
-  position: number,
-  consecutiveSixes = 0,
-): PlayerState {
-  return {
-    id: "p1",
-    name: "Alice",
-    color: "#dc2626",
-    position,
-    consecutiveSixes,
-  };
-}
-
-function makePlayerState2(
-  position: number,
-  consecutiveSixes = 0,
-): PlayerState {
-  return {
-    id: "p2",
-    name: "Bob",
-    color: "#2563eb",
-    position,
-    consecutiveSixes,
-  };
-}
-
 function createTestState(overrides: {
   positions?: [number, number];
   consecutiveSixes?: [number, number];
   boardId?: "classic" | "venom";
 } = {}): GameState {
-  const state = createInitialGameState(overrides.boardId ?? "classic", testPlayers.slice(0, 2));
+  const state = createInitialGameState(
+    overrides.boardId ?? "classic",
+    testPlayers.slice(0, 2),
+  );
   const pos = overrides.positions ?? [0, 0];
   const sixes = overrides.consecutiveSixes ?? [0, 0];
   return {
@@ -80,14 +57,14 @@ describe("Game Engine", () => {
       const state = createTestState({ positions: [15, 0] });
       const result = applyRoll(state, 3);
       expect(result.players[0].position).toBe(18);
-      expect(result.players[1].position).toBe(0); // unchanged
+      expect(result.players[1].position).toBe(0);
     });
 
-    it("handles overshoot - player stays in place when roll goes past 100", () => {
+    it("handles overshoot — no move when roll goes past 100", () => {
       const state = createTestState({ positions: [97, 0] });
       const result = applyRoll(state, 5);
-      expect(result.players[0].position).toBe(97); // no move
-      expect(result.turnPhase).toBe("next_player"); // turn passes
+      expect(result.players[0].position).toBe(97);
+      expect(result.turnPhase).toBe("next_player");
     });
 
     it("wins when landing exactly on 100", () => {
@@ -105,18 +82,16 @@ describe("Game Engine", () => {
       expect(result.status).toBe("game_over");
     });
 
-    it("moves player down on snake head", () => {
-      // Classic: tile 16 is a snake head → tail at 6
+    it("slides down on snake head", () => {
       const state = createTestState({ positions: [10, 0] });
       const result = applyRoll(state, 6);
-      expect(result.players[0].position).toBe(6); // snake tail
+      expect(result.players[0].position).toBe(6);
     });
 
-    it("moves player up on ladder bottom", () => {
-      // Classic: tile 1 is a ladder bottom → top at 38
+    it("climbs up on ladder bottom", () => {
       const state = createTestState({ positions: [0, 0] });
       const result = applyRoll(state, 1);
-      expect(result.players[0].position).toBe(38); // ladder top
+      expect(result.players[0].position).toBe(38);
     });
 
     it("forfeits turn after three consecutive sixes", () => {
@@ -134,7 +109,7 @@ describe("Game Engine", () => {
       const state = createTestState({ positions: [10, 0] });
       const result = applyRoll(state, 6);
       expect(result.turnPhase).toBe("extra_roll");
-      expect(result.currentPlayerIndex).toBe(0); // same player
+      expect(result.currentPlayerIndex).toBe(0);
     });
 
     it("does not grant extra roll on non-six roll", () => {
@@ -160,6 +135,15 @@ describe("Game Engine", () => {
       const result = applyRoll(state, 3);
       expect(result.players[0].consecutiveSixes).toBe(0);
     });
+
+    it("does not chain snake tails into additional snakes", () => {
+      // Position 16 is a snake head → 6 in classic. The engine only resolves
+      // the initial landing tile, not chaining from the snake tail. Verify
+      // that landing on a snake only goes to its tail and stops.
+      const state = createTestState({ positions: [10, 0] });
+      const result = applyRoll(state, 6);
+      expect(result.players[0].position).toBe(6); // snake tail, not chained further
+    });
   });
 
   describe("advanceTurn", () => {
@@ -184,32 +168,23 @@ describe("Game Engine", () => {
         { id: "p1", name: "A", color: "#f00" },
         { id: "p2", name: "B", color: "#0f0" },
       ]);
-      // Simulate Bob having pending sixes
-      state.players[1] = { ...state.players[1], consecutiveSixes: 3 };
+      (state.players[1] as { consecutiveSixes: number }).consecutiveSixes = 3;
       const result = advanceTurn(state);
       expect(result.players[1].consecutiveSixes).toBe(0);
     });
   });
 
   describe("Board modes", () => {
-    it("venom board has no ladders", () => {
-      const state = createTestState({
-        positions: [0, 0],
-        boardId: "venom",
-      });
-      // Roll 1 → tile 1 in venom has no ladder, so stays at 1
+    it("venom board has no ladders — tile 1 stays at 1", () => {
+      const state = createTestState({ positions: [0, 0], boardId: "venom" });
       const result = applyRoll(state, 1);
       expect(result.players[0].position).toBe(1);
     });
 
-    it("venom board has snakes at expected positions", () => {
-      // Venom: tile 8 is a snake head → tail at 3
-      const state = createTestState({
-        positions: [4, 0],
-        boardId: "venom",
-      });
+    it("venom board snakes at expected positions", () => {
+      const state = createTestState({ positions: [4, 0], boardId: "venom" });
       const result = applyRoll(state, 4);
-      expect(result.players[0].position).toBe(3); // snake tail
+      expect(result.players[0].position).toBe(3);
     });
   });
 

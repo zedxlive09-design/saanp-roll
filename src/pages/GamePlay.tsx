@@ -10,8 +10,11 @@ import {
   applyRoll,
   advanceTurn,
   BOARD_CONFIGS,
+  getSnakeTail,
+  getLadderTop,
 } from "@/lib/game-engine";
 import type { BoardMode, GameState } from "@/lib/game-engine";
+import { soundManager } from "@/lib/sounds";
 import { ArrowLeft, RefreshCw, ScrollText } from "lucide-react";
 
 interface LocationState {
@@ -66,6 +69,14 @@ function GamePlayInner({
     Record<string, number>
   >({});
 
+  // Initialize sound manager on first render and clean up on unmount
+  useEffect(() => {
+    soundManager.init();
+    return () => {
+      soundManager.stopAll();
+    };
+  }, []);
+
   // Cleanup running timeouts/intervals on unmount
   useEffect(() => {
     return () => {
@@ -91,15 +102,36 @@ function GamePlayInner({
       // The landing tile before snake/ladder resolution
       const landingTile = didOvershoot ? player.position : Math.min(rawNewPos, 100);
 
+      // Animate stepping tile-by-tile from current position to landing tile
+      const fromPos = player.position;
+      const tilesToStep = landingTile - fromPos;
+
+      // Play overshoot sound if applicable
+      if (didOvershoot) {
+        soundManager.play("overshoot");
+      }
+
+      // Schedule snake/ladder sound effects aligned with animation timing
+      if (!didOvershoot && rawNewPos <= 100 && tilesToStep > 0) {
+        const snakeTail = getSnakeTail(boardMode, rawNewPos);
+        const ladderTop = getLadderTop(boardMode, rawNewPos);
+        if (snakeTail) {
+          setTimeout(() => soundManager.play("snake_bite"), tilesToStep * TILE_STEP_DELAY + 200);
+        } else if (ladderTop) {
+          setTimeout(() => soundManager.play("ladder_climb"), tilesToStep * TILE_STEP_DELAY + 200);
+        }
+      }
+
+      // Play win fanfare if game is over
+      if (afterRoll.status === "game_over") {
+        setTimeout(() => soundManager.play("win_fanfare"), 800);
+      }
+
       // Highlight the landing tile
       if (!didOvershoot && landingTile <= 100) {
         setHighlightedTile(landingTile);
         setTimeout(() => setHighlightedTile(null), 1200);
       }
-
-      // Animate stepping tile-by-tile from current position to landing tile
-      const fromPos = player.position;
-      const tilesToStep = landingTile - fromPos;
 
       if (tilesToStep > 0 && !didOvershoot) {
         setAnimatingPlayer({
@@ -116,6 +148,8 @@ function GamePlayInner({
             ...prev,
             [player.id]: steppedPos,
           }));
+          // Play a soft tick for each tile stepped
+          soundManager.play("tile_step");
           step++;
 
           if (steppedPos >= landingTile) {

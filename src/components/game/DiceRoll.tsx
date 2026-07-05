@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { soundManager } from "@/lib/sounds";
 
 // [row, col] positions on a 3x3 grid (rows 1-3 top to bottom, cols 2/4/6 left to right)
 const DOT_POSITIONS: Record<number, [number, number][]> = {
@@ -33,6 +34,9 @@ export function DiceRoll({
     if (disabled || rolling) return;
     setRolling(true);
     setFacesKey((k) => k + 1);
+
+    // Play dice rattle
+    soundManager.play("dice_roll");
 
     // Animated tumble — rapid random flips with 3D rotation timing
     const flipCount = 4 + Math.floor(Math.random() * 4);

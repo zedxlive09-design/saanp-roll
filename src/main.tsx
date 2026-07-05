@@ -1,3 +1,4 @@
+import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { InstrumentationProvider } from "@/instrumentation.tsx";
@@ -12,6 +13,9 @@ import "./types/global.d.ts";
 // Lazy load route components for better code splitting
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
+const Home = lazy(() => import("./pages/Home.tsx"));
+const GameSetup = lazy(() => import("./pages/GameSetup.tsx"));
+const GamePlay = lazy(() => import("./pages/GamePlay.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -61,7 +65,10 @@ createRoot(document.getElementById("root")!).render(
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               <Route path="/" element={<Landing />} />
-              <Route path="/auth" element={<AuthPage redirectAfterAuth="/" />} /> {/* TODO: change redirect after auth to correct page */}
+              <Route path="/auth" element={<AuthPage redirectAfterAuth="/home" />} />
+              <Route path="/home" element={<Home />} />
+              <Route path="/game/setup" element={<GameSetup />} />
+              <Route path="/game/play" element={<GamePlay />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

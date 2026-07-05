@@ -1,0 +1,126 @@
+import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+
+// [row, col] positions on a 3x3 grid (rows 1-3 top to bottom, cols 2/4/6 left to right)
+const DOT_POSITIONS: Record<number, [number, number][]> = {
+  1: [[2, 4]],
+  2: [[1, 6], [3, 2]],
+  3: [[1, 6], [2, 4], [3, 2]],
+  4: [[1, 2], [1, 6], [3, 2], [3, 6]],
+  5: [[1, 2], [1, 6], [2, 4], [3, 2], [3, 6]],
+  6: [[1, 2], [1, 6], [2, 2], [2, 6], [3, 2], [3, 6]],
+};
+
+interface DiceRollProps {
+  onRoll: (value: number) => void;
+  disabled?: boolean;
+  currentPlayerColor?: string;
+  isExtraRoll?: boolean;
+}
+
+export function DiceRoll({
+  onRoll,
+  disabled = false,
+  currentPlayerColor = "#6366f1",
+  isExtraRoll = false,
+}: DiceRollProps) {
+  const [rolling, setRolling] = useState(false);
+  const [lastValue, setLastValue] = useState<number | null>(null);
+
+  const handleRoll = async () => {
+    if (disabled || rolling) return;
+    setRolling(true);
+
+    // Animate for a moment with a few random flips
+    const flipCount = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < flipCount; i++) {
+      await new Promise((r) => setTimeout(r, 80 + i * 40));
+      setLastValue(Math.floor(Math.random() * 6) + 1);
+    }
+
+    // Final value
+    const finalValue = Math.floor(Math.random() * 6) + 1;
+    setLastValue(finalValue);
+    await new Promise((r) => setTimeout(r, 150));
+
+    setRolling(false);
+    onRoll(finalValue);
+  };
+
+  const pips = lastValue ? DOT_POSITIONS[lastValue] : DOT_POSITIONS[1];
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <motion.button
+        onClick={handleRoll}
+        disabled={disabled || rolling}
+        whileTap={rolling ? {} : { scale: 0.95 }}
+        className={cn(
+          "relative w-20 h-20 rounded-xl shadow-lg cursor-pointer select-none",
+          "border-2 transition-colors duration-200",
+          disabled
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:shadow-xl active:shadow-md",
+          rolling ? "animate-bounce" : "",
+        )}
+        style={{
+          backgroundColor: "#fafaf9",
+          borderColor: currentPlayerColor,
+          boxShadow: rolling
+            ? `0 0 20px ${currentPlayerColor}40`
+            : `0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)`,
+        }}
+      >
+        {/* Dice dots */}
+        <div className="absolute inset-2 grid grid-cols-3 grid-rows-3 gap-1">
+          {Array.from({ length: 9 }).map((_, i) => {
+            const row = Math.floor(i / 3) + 1;
+            const col = (i % 3) * 2 + 2;
+            const hasDot = pips.some(([r, c]) => r === row && c === col);
+            return (
+              <div
+                key={i}
+                className="flex items-center justify-center"
+              >
+                {hasDot && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="w-3 h-3 rounded-full"
+                    style={{
+                      backgroundColor: rolling ? "#a1a1aa" : "#1c1917",
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Glow ring when rolling */}
+        {rolling && (
+          <motion.div
+            className="absolute inset-0 rounded-xl"
+            style={{ boxShadow: `inset 0 0 20px ${currentPlayerColor}60` }}
+            animate={{ opacity: [0.3, 0.8, 0.3] }}
+            transition={{ duration: 0.6, repeat: Infinity }}
+          />
+        )}
+      </motion.button>
+
+      <AnimatePresence mode="wait">
+        {isExtraRoll && (
+          <motion.span
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="text-xs font-medium text-amber-600"
+          >
+            🎲 Extra roll!
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

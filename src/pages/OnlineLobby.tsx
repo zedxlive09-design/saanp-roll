@@ -1,0 +1,423 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router";
+import { motion, AnimatePresence } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { LogoDropdown } from "@/components/LogoDropdown";
+import { useGameRoom } from "@/hooks/use-game-room";
+import { useAuth } from "@/hooks/use-auth";
+import { BOARD_CONFIGS } from "@/lib/game-engine";
+import type { BoardMode } from "@/lib/game-engine";
+import { toast } from "sonner";
+import {
+  ArrowLeft,
+  Copy,
+  Check,
+  Users,
+  Play,
+  LogIn,
+  Loader2,
+  Link as LinkIcon,
+  Skull,
+} from "lucide-react";
+
+type LobbyPhase = "menu" | "creating" | "joining" | "waiting" | "starting";
+
+export default function OnlineLobby() {
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+
+  const [phase, setPhase] = useState<LobbyPhase>("menu");
+  const [roomCode, setRoomCode] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [createCode, setCreateCode] = useState("");
+  const [playerCount, setPlayerCount] = useState(2);
+  const [boardMode, setBoardMode] = useState<BoardMode>("classic");
+  const [isLoading, setIsLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [gameId, setGameId] = useState<string | null>(null);
+  const [joinName, setJoinName] = useState("");
+
+  const { game, createGame, joinGame, startGame } = useGameRoom(
+    phase === "waiting" || phase === "starting" ? createCode || joinCode : null,
+  );
+
+  // Navigate to game when it starts
+  useEffect(() => {
+    if (game?.status === "playing" && (createCode || joinCode)) {
+      navigate(`/game/online/${createCode || joinCode}`, { replace: true });
+    }
+  }, [game?.status, createCode, joinCode, navigate]);
+
+  const handleCreate = async () => {
+    setIsLoading(true);
+    try {
+      const result = await createGame({ boardId: boardMode, playerCount });
+      const code = result.roomCode;
+      setCreateCode(code);
+      setGameId(result.gameId);
+      setPhase("waiting");
+      toast.success("Room created! Share the code with friends.");
+    } catch (err) {
+      toast.error("Failed to create room");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleJoin = async () => {
+    if (joinCode.length < 4) return;
+    setIsLoading(true);
+    try {
+      const result = await joinGame({
+        roomCode: joinCode.toUpperCase(),
+        playerName: joinName || undefined,
+      });
+      setCreateCode(joinCode.toUpperCase());
+      setGameId(result.gameId);
+      setPhase("waiting");
+      toast.success("Joined room! Waiting for host to start.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to join room",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStart = async () => {
+    if (!gameId) return;
+    setIsLoading(true);
+    try {
+      await startGame({ gameId: gameId as any });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to start game",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const copyRoomCode = () => {
+    navigator.clipboard.writeText(createCode || joinCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const isHost =
+    game?.hostUserId ===
+    (isAuthenticated
+      ? (game?.players[0]?.userId ?? "")
+      : (game?.players[0]?.userId ?? ""));
+
+  const joinedCount = game?.players.filter((p) => p.userId).length ?? 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-gradient-to-b from-background to-secondary/20"
+    >
+      {/* Header */}
+      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/home")}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex items-center gap-3">
+            <LogoDropdown />
+            <h1 className="text-lg font-bold tracking-tight">
+              {phase === "waiting" ? "Game Lobby" : "Play Online"}
+            </h1>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
+        <AnimatePresence mode="wait">
+          {phase === "menu" && (
+            <motion.div
+              key="menu"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              className="space-y-4"
+            >
+              <p className="text-sm text-muted-foreground">
+                Create a room and share the code, or join an existing game.
+              </p>
+
+              {/* Create Room */}
+              <Card className="border shadow-sm">
+                <CardContent className="p-5 space-y-4">
+                  <h2 className="font-semibold text-sm flex items-center gap-2">
+                    <Play className="h-4 w-4 text-indigo-500" />
+                    Create a Room
+                  </h2>
+
+                  {/* Board Mode */}
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground font-medium">
+                      Board Mode
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["classic", "venom"] as BoardMode[]).map((mode) => {
+                        const config = BOARD_CONFIGS[mode];
+                        const isSelected = boardMode === mode;
+                        return (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setBoardMode(mode)}
+                            className={`flex flex-col items-center gap-1 rounded-xl border-2 p-3 transition-all cursor-pointer ${
+                              isSelected
+                                ? mode === "venom"
+                                  ? "border-red-500 bg-red-50 dark:bg-red-950/20"
+                                  : "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20"
+                                : "border-border hover:border-muted-foreground/30"
+                            }`}
+                          >
+                            {mode === "venom" ? (
+                              <Skull className="h-4 w-4 text-red-600" />
+                            ) : (
+                              <Play className="h-4 w-4 text-indigo-600" />
+                            )}
+                            <span className="font-semibold text-xs">
+                              {config.name}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Player Count */}
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground font-medium">
+                      Players
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {[2, 3, 4].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setPlayerCount(n)}
+                          className={`flex-1 rounded-lg border-2 py-2 text-sm font-medium transition-all cursor-pointer ${
+                            playerCount === n
+                              ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400"
+                              : "border-border hover:border-muted-foreground/30"
+                          }`}
+                        >
+                          {n} Players
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button
+                    className="w-full"
+                    onClick={handleCreate}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="mr-2 h-4 w-4" />
+                    )}
+                    Create Room
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or
+                  </span>
+                </div>
+              </div>
+
+              {/* Join Room */}
+              <Card className="border shadow-sm">
+                <CardContent className="p-5 space-y-4">
+                  <h2 className="font-semibold text-sm flex items-center gap-2">
+                    <LogIn className="h-4 w-4 text-emerald-500" />
+                    Join a Room
+                  </h2>
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Enter room code"
+                      value={joinCode}
+                      onChange={(e) =>
+                        setJoinCode(e.target.value.toUpperCase())
+                      }
+                      maxLength={6}
+                      className="text-center text-lg font-mono tracking-[0.3em] uppercase"
+                    />
+                    <Input
+                      placeholder="Your display name (optional)"
+                      value={joinName}
+                      onChange={(e) => setJoinName(e.target.value)}
+                      maxLength={20}
+                    />
+                  </div>
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={handleJoin}
+                    disabled={isLoading || joinCode.length < 4}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <LinkIcon className="mr-2 h-4 w-4" />
+                    )}
+                    Join Room
+                  </Button>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {phase === "waiting" && (
+            <motion.div
+              key="waiting"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              className="space-y-4"
+            >
+              {/* Room Code */}
+              <Card className="border shadow-sm text-center">
+                <CardContent className="p-6 space-y-3">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                    Room Code
+                  </p>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-3xl font-mono font-bold tracking-[0.25em] text-indigo-600 dark:text-indigo-400">
+                      {createCode || joinCode}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={copyRoomCode}
+                      className="h-9 w-9"
+                    >
+                      {copied ? (
+                        <Check className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Share this code with friends to join the game
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Players List */}
+              <Card className="border shadow-sm">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium text-sm">Players</span>
+                    </div>
+                    <Badge variant="secondary">
+                      {joinedCount}/{game?.players.length ?? 2}
+                    </Badge>
+                  </div>
+                  <Separator />
+                  <div className="space-y-2">
+                    {(game?.players ?? []).map((player, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
+                      >
+                        <div
+                          className="h-7 w-7 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                          style={{ backgroundColor: player.color }}
+                        >
+                          {player.name.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {player.name}
+                            {player.userId === game?.hostUserId && (
+                              <Badge
+                                variant="secondary"
+                                className="ml-2 text-[10px]"
+                              >
+                                Host
+                              </Badge>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex items-center">
+                          {player.userId ? (
+                            player.isConnected ? (
+                              <span className="flex items-center gap-1 text-[11px] text-emerald-600">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                Ready
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <span className="h-2 w-2 rounded-full bg-muted-foreground" />
+                                Away
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground italic">
+                              Waiting...
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Start Button */}
+              <Button
+                size="lg"
+                className="w-full h-14 text-lg font-semibold"
+                onClick={handleStart}
+                disabled={
+                  isLoading || joinedCount < 2 || !gameId
+                }
+              >
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : joinedCount < 2 ? (
+                  "Waiting for players..."
+                ) : (
+                  <>
+                    <Play className="mr-2 h-5 w-5" />
+                    Start Game
+                  </>
+                )}
+              </Button>
+
+              {joinedCount < 2 && (
+                <p className="text-center text-xs text-muted-foreground">
+                  Need at least 2 players to start
+                </p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+    </motion.div>
+  );
+}

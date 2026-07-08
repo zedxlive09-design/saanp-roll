@@ -20,6 +20,8 @@ const GamePlay = lazy(() => import("./pages/GamePlay.tsx"));
 const Settings = lazy(() => import("./pages/Settings.tsx"));
 const History = lazy(() => import("./pages/History.tsx"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard.tsx"));
+const OnlineLobby = lazy(() => import("./pages/OnlineLobby.tsx"));
+const OnlineGamePlay = lazy(() => import("./pages/OnlineGamePlay.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -82,6 +84,8 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/settings" element={<Settings />} />
               <Route path="/history" element={<History />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/lobby" element={<OnlineLobby />} />
+              <Route path="/game/online/:roomCode" element={<OnlineGamePlay />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

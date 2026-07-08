@@ -32,12 +32,31 @@ const schema = defineSchema(
       role: v.optional(roleValidator), // role of the user. do not remove
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
-    // add other tables here
-
-    // tableName: defineTable({
-    //   ...
-    //   // table fields
-    // }).index("by_field", ["field"])
+    // Online game rooms
+    games: defineTable({
+      roomCode: v.string(), // 6-char shareable code
+      hostUserId: v.string(), // creator's userId
+      boardId: v.string(), // "classic" | "venom"
+      status: v.string(), // "waiting" | "playing" | "finished"
+      players: v.array(
+        v.object({
+          userId: v.string(),
+          name: v.string(),
+          color: v.string(),
+          isConnected: v.boolean(),
+          position: v.number(),
+          consecutiveSixes: v.number(),
+        }),
+      ),
+      currentPlayerIndex: v.number(),
+      turnPhase: v.string(), // "rolling" | "extra_roll" | "next_player"
+      winnerId: v.optional(v.string()),
+      lastRoll: v.optional(v.number()),
+      moveLog: v.array(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_roomCode", ["roomCode"])
+      .index("by_status", ["status"]),
   },
   {
     schemaValidation: false,

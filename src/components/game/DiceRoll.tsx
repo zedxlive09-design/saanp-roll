@@ -18,6 +18,13 @@ interface DiceRollProps {
   disabled?: boolean;
   currentPlayerColor?: string;
   isExtraRoll?: boolean;
+  /**
+   * If provided, the final roll value comes from this async function
+   * (e.g., a server mutation) instead of being generated locally.
+   * The animation still shows random flips, but the final shown value
+   * is the resolved value from this function.
+   */
+  serverRoll?: () => Promise<number>;
 }
 
 export function DiceRoll({
@@ -25,6 +32,7 @@ export function DiceRoll({
   disabled = false,
   currentPlayerColor = "#6366f1",
   isExtraRoll = false,
+  serverRoll,
 }: DiceRollProps) {
   const [rolling, setRolling] = useState(false);
   const [lastValue, setLastValue] = useState<number | null>(null);
@@ -45,8 +53,10 @@ export function DiceRoll({
       setLastValue(Math.floor(Math.random() * 6) + 1);
     }
 
-    // Final roll
-    const finalValue = Math.floor(Math.random() * 6) + 1;
+    // Final roll — either from server or local
+    const finalValue = serverRoll
+      ? await serverRoll()
+      : Math.floor(Math.random() * 6) + 1;
     setLastValue(finalValue);
     await new Promise((r) => setTimeout(r, 200));
     setRolling(false);

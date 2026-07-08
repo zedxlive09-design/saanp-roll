@@ -125,23 +125,21 @@ export default function Home() {
           <Button
             variant="outline"
             size="lg"
-            className="w-full h-24 flex items-center justify-between px-6 text-left border-2 border-dashed opacity-60 cursor-not-allowed"
-            disabled
+            className="w-full h-24 flex items-center justify-between px-6 text-left border-2 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
+            onClick={() => navigate("/lobby")}
           >
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
-                <Wifi className="h-6 w-6 text-slate-400" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/50">
+                <Wifi className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
                 <p className="text-base font-semibold">Play Online</p>
                 <p className="text-sm text-muted-foreground">
-                  Coming soon — real-time multiplayer
+                  Create or join a room — real-time multiplayer
                 </p>
               </div>
             </div>
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900/50 dark:text-amber-400">
-              SOON
-            </span>
+            <div className="text-2xl text-muted-foreground">→</div>
           </Button>
         </motion.div>
 

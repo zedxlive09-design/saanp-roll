@@ -2,29 +2,28 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { LogoDropdown } from "@/components/LogoDropdown";
+import { useSoundSettings } from "@/hooks/use-sound-settings";
 import {
   ArrowLeft,
   Palette,
   Bell,
   Volume2,
+  VolumeX,
   Eye,
   Shield,
   Info,
 } from "lucide-react";
 
-const settingsSections = [
+const soonSections = [
   {
     icon: Palette,
     label: "Appearance",
     description: "Theme, colors, and display preferences",
     color: "#6366f1",
-  },
-  {
-    icon: Volume2,
-    label: "Sound & Effects",
-    description: "Dice sounds, music, and volume",
-    color: "#ec4899",
   },
   {
     icon: Bell,
@@ -54,6 +53,8 @@ const settingsSections = [
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { soundEnabled, soundVolume, setSoundEnabled, setSoundVolume } =
+    useSoundSettings();
 
   return (
     <motion.div
@@ -81,14 +82,89 @@ export default function Settings() {
         </p>
 
         <div className="space-y-3">
-          {settingsSections.map((section, i) => {
+          {/* Sound & Effects — fully functional */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0 }}
+          >
+            <Card className="border shadow-sm">
+              <CardContent className="p-5 space-y-4">
+                {/* Header row */}
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-xl shrink-0"
+                    style={{ backgroundColor: "#ec489915" }}
+                  >
+                    {soundEnabled ? (
+                      <Volume2 className="h-5 w-5" style={{ color: "#ec4899" }} />
+                    ) : (
+                      <VolumeX className="h-5 w-5" style={{ color: "#ec4899" }} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm">Sound & Effects</p>
+                    <p className="text-xs text-muted-foreground">
+                      Dice sounds, music, and effects
+                    </p>
+                  </div>
+                  <Switch
+                    checked={soundEnabled}
+                    onCheckedChange={setSoundEnabled}
+                    className="shrink-0"
+                  />
+                </div>
+
+                {/* Volume slider (visible when sound is on) */}
+                <motion.div
+                  initial={false}
+                  animate={{
+                    height: soundEnabled ? "auto" : 0,
+                    opacity: soundEnabled ? 1 : 0,
+                  }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  className="overflow-hidden"
+                >
+                  <div className="pt-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="volume-slider"
+                        className="text-xs text-muted-foreground"
+                      >
+                        Volume
+                      </Label>
+                      <span className="text-xs font-mono text-muted-foreground tabular-nums">
+                        {Math.round(soundVolume * 100)}%
+                      </span>
+                    </div>
+                    <Slider
+                      id="volume-slider"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={[Math.round(soundVolume * 100)]}
+                      onValueChange={([val]) => setSoundVolume(val / 100)}
+                      className="cursor-pointer"
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground/60">
+                      <span>Off</span>
+                      <span>Max</span>
+                    </div>
+                  </div>
+                </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Other settings — coming soon */}
+          {soonSections.map((section, i) => {
             const Icon = section.icon;
             return (
               <motion.div
                 key={section.label}
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 * i }}
+                transition={{ delay: 0.05 * (i + 1) }}
               >
                 <Card className="border shadow-sm hover:shadow-md transition-all cursor-pointer group">
                   <CardContent className="flex items-center gap-4 p-4">

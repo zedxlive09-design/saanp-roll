@@ -162,6 +162,24 @@ class SoundManager {
   private urls: string[] = [];
   private pending: Promise<void> | null = null;
   private initialized = false;
+  private _muted = false;
+  private _volume = 1;
+
+  /** Whether sound is globally muted. */
+  get muted(): boolean {
+    return this._muted;
+  }
+  set muted(val: boolean) {
+    this._muted = val;
+  }
+
+  /** Master volume level from 0 to 1. */
+  get volume(): number {
+    return this._volume;
+  }
+  set volume(val: number) {
+    this._volume = Math.max(0, Math.min(1, val));
+  }
 
   /** Initialize all sound effects — call once on first user interaction. */
   async init(): Promise<void> {
@@ -225,10 +243,15 @@ class SoundManager {
 
   /** Play a sound effect by name. Awaits init if still in progress. */
   async play(name: SoundEffect): Promise<void> {
+    if (this._muted) return;
     if (this.pending) {
       await this.pending;
     }
-    this.cache.get(name)?.play();
+    const howl = this.cache.get(name);
+    if (howl) {
+      howl.volume(this._volume);
+      howl.play();
+    }
   }
 
   /** Stop all currently playing sounds and release resources. */

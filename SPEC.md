@@ -12,7 +12,7 @@ Saanp Seedhi (साँप सीढ़ी) is the classic Indian board game of 
 
 ### 1.1 Vision
 
-A beautifully animated, authoritative online board game that works seamlessly across devices. Phase 1 delivers local pass-and-play. Future phases add online multiplayer, leaderboards, match history, and ranked play.
+A beautifully animated, authoritative online board game that works seamlessly across devices. Phase 1 delivers local pass-and-play with a polished settings experience. Future phases add online multiplayer, leaderboards, match history, and ranked play.
 
 ### 1.2 Tech Stack
 
@@ -22,6 +22,7 @@ A beautifully animated, authoritative online board game that works seamlessly ac
 | Styling | Tailwind CSS v4 + shadcn/ui |
 | Animation | Framer Motion |
 | Audio | Howler.js (procedural synthesis via Web Audio API) |
+| Theme | next-themes (Light / Dark / System) |
 | Backend | Convex (realtime database + serverless functions) |
 | Auth | Convex Auth (email OTP + anonymous) |
 | Icons | Lucide Icons |
@@ -112,15 +113,23 @@ A high-variance variant with 15 snakes and zero ladders. Every landing is danger
 │  React UI   │────▶│ Game Engine  │────▶│  Sound FX    │
 │  (Pages)    │     │  (Pure TS)   │     │  (Howler.js) │
 └─────────────┘     └──────────────┘     └──────────────┘
+       │                                       ▲
+       ▼                                       │
+┌─────────────┐                        ┌───────────────┐
+│  Settings   │────────────────────────│ useSoundSettings│
+│  Page       │  localStorage sync     │  (muted/volume)│
+└─────────────┘                        └───────────────┘
        │
        ▼
 ┌─────────────┐
-│ Convex Auth  │
-│ (Optional)   │
+│ next-themes  │
+│ ThemeProvider│
 └─────────────┘
 ```
 
 - The game engine is entirely client-side, implemented as pure TypeScript functions with no side effects.
+- Sound settings (mute toggle + volume slider) persist to localStorage.
+- Theme (light/dark/system) persists via next-themes.
 - No Convex database interaction for game state (local state only).
 - Auth is optional (anonymous play supported).
 
@@ -206,6 +215,9 @@ awaiting_roll ──roll──▶ rolling ──resolve──▶ resolving_move
 | `/home` | Home | Dashboard with Play Local, Play Online, stats |
 | `/game/setup` | Game Setup | Configure players, names, board mode |
 | `/game/play` | Game Play | Active game with board, dice, progress |
+| `/settings` | Settings | Sound toggle, volume slider, theme selector |
+| `/history` | Match History | Past matches with stats (static sample data) |
+| `/leaderboard` | Leaderboard | Top players ranked by performance (static) |
 | `*` | 404 | Not found fallback |
 
 ### 5.2 Key Components
@@ -215,6 +227,7 @@ awaiting_roll ──roll──▶ rolling ──resolve──▶ resolving_move
 - **Player Progress:** Shows all players' positions with color-coded progress bars.
 - **Move Log:** Collapsible log of all moves made during the game.
 - **Game Over Banner:** Animated victory screen with rematch option.
+- **LogoDropdown:** App logo with dropdown menu (Landing Page, Sign Out if authenticated).
 
 ### 5.3 Sound Effects
 
@@ -227,6 +240,14 @@ awaiting_roll ──roll──▶ rolling ──resolve──▶ resolving_move
 | `win_fanfare` | Player reaches 100 | Sine tone 784Hz (G5), 0.5s |
 | `overshoot` | Roll > remaining tiles | Triangle sweep 300→100Hz, 0.25s |
 
+### 5.4 Settings
+
+| Setting | Type | Persistence | Description |
+|---------|------|-------------|-------------|
+| Sound On/Off | Switch (toggle) | localStorage | Mutes/unmutes all game sounds |
+| Volume | Slider (0–100%) | localStorage | Master volume level |
+| Theme | 3-button selector (Light/Dark/System) | next-themes | Color scheme preference |
+
 ---
 
 ## 6. Future Phases
@@ -237,6 +258,7 @@ awaiting_roll ──roll──▶ rolling ──resolve──▶ resolving_move
 - Random opponent matching
 - Server-authoritative dice rolls
 - Player rankings and ELO
+- Real match history & leaderboard
 
 ### Phase 3: Social & Engagement
 - Match history and replays

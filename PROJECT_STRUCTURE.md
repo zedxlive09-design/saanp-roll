@@ -12,6 +12,9 @@
 /home          → Home.tsx          (Dashboard hub — public)
 /game/setup    → GameSetup.tsx     (Create new game — public)
 /game/play     → GamePlay.tsx      (Active game — public)
+/settings      → Settings.tsx      (Sound + Appearance controls — public)
+/history       → History.tsx       (Match history, static sample data — public)
+/leaderboard   → Leaderboard.tsx   (Top players, static sample data — public)
 /*             → NotFound.tsx      (404 fallback — public)
 ```
 
@@ -27,10 +30,11 @@ All routes are **lazy loaded** via React.lazy() + Suspense. Auth is optional (an
 
 **What it does:**
 - Creates the React root and renders the app
-- Wraps everything in providers: `StrictMode`, `InstrumentationProvider`, `ConvexAuthProvider`, `BrowserRouter`
+- Wraps everything in providers: `StrictMode`, `InstrumentationProvider`, `ThemeProvider` (next-themes), `ConvexAuthProvider`, `BrowserRouter`
+- `ThemeProvider` configured with `attribute="class"`, `defaultTheme="system"`, `enableSystem`, `disableTransitionOnChange`
 - Configures lazy-loaded routes with a `RouteLoading` fallback (animated pulse)
 - `RouteSyncer` component posts route changes to parent frame (Freebuff iframe integration)
-- All 6 routes defined with Suspense-wrapped lazy imports
+- All 9 routes defined with Suspense-wrapped lazy imports
 
 **File flow:** This is the entry point. It renders the provider tree which wraps the route-switched pages.
 
@@ -46,6 +50,7 @@ All routes are **lazy loaded** via React.lazy() + Suspense. Auth is optional (an
 - All shadcn/ui design tokens: background, foreground, primary, secondary, card, accent, destructive, chart colors, sidebar colors
 - Global base styles: border-box, font-family (Inter), cursor-pointer on buttons
 - Game-specific theme: indigo primary (#6366f1), warm neutrals, soft borders
+- `.dark` class overrides all color tokens for dark mode
 
 **File flow:** Imported by `main.tsx` — all components inherit these theme colors.
 
@@ -107,7 +112,7 @@ All routes are **lazy loaded** via React.lazy() + Suspense. Auth is optional (an
 **Purpose:** Central hub after login — quick actions and stats.
 
 **What it renders:**
-- Header with logo, title, and settings gear icon
+- Header with logo, title, and settings gear icon (navigates to `/settings`)
 - **Stats row:** Games Won (trophy icon), Games Played (dice icon) — both show 0
 - **Play Local button:** Large card with Users icon, navigates to `/game/setup`
 - **Play Online button:** Disabled with "SOON" badge, shows upcoming online multiplayer feature
@@ -162,7 +167,7 @@ All routes are **lazy loaded** via React.lazy() + Suspense. Auth is optional (an
 **Sound Integration:**
 - `soundManager.init()` called in `useEffect`
 - Sounds triggered: `dice_roll`, `tile_step`, `snake_bite`, `ladder_climb`, `win_fanfare`, `overshoot`
-- Timing aligned with animation steps and delays
+- SoundManager checks `muted` and `volume` properties before playing (synced from `useSoundSettings`)
 
 **Data flow:**
 1. Receives `boardMode` + `players` from `location.state` (from GameSetup)
@@ -170,6 +175,65 @@ All routes are **lazy loaded** via React.lazy() + Suspense. Auth is optional (an
 3. On roll: `applyRoll()` → animation → `advanceTurn()` or extra roll
 4. `displayPlayers` derives positions from animated state or game state
 5. Game over: sets `gameState.status = "game_over"`, shows winner banner
+
+---
+
+### `src/pages/Settings.tsx` — Settings Page (`/settings`)
+
+**Purpose:** Customize game experience — appearance theme and sound/volume controls.
+
+**This is the settings hub with two live sections.**
+
+**What it renders:**
+
+**Appearance section (functional):**
+- Header row with icon (dynamic — Sun/Moon/Monitor based on current theme) and label
+- 3-button theme selector: Light ☀️, Dark 🌙, System 💻
+- Active theme highlighted with indigo border + background
+- Uses `useAppTheme()` from `@/hooks/use-theme`
+
+**Sound & Effects section (functional):**
+- Header row with Volume2/VolumeX icon (dynamic based on sound state) and label
+- Mute/unmute Switch toggle
+- Collapsible volume slider (animated expand/collapse via Framer Motion)
+- Volume percentage display with Off/Max labels
+- Uses `useSoundSettings()` from `@/hooks/use-sound-settings`
+
+**Placeholder sections (all "Soon"):**
+- Notifications
+- Accessibility
+- Privacy & Security
+- About
+
+---
+
+### `src/pages/History.tsx` — Match History (`/history`)
+
+**Purpose:** Display past match results with summary stats.
+
+**What it renders:**
+- Header with back navigation and LogoDropdown
+- Summary stats row: Total Games, Wins, Best Streak (3-column grid)
+- Match list with sample data showing mode, player count, winner, duration, date
+- Each match card has hover effects and staggered entrance animations
+- Empty state hint: "Match history is stored locally for now. Online sync is coming soon!"
+
+**Data flow:** Static sample data. Future: connect to Convex for real match recording.
+
+---
+
+### `src/pages/Leaderboard.tsx` — Leaderboard (`/leaderboard`)
+
+**Purpose:** Show top players ranked by performance.
+
+**What it renders:**
+- Header with back navigation and LogoDropdown
+- Stats overview: Top Player name, This Week games, Record Streak
+- Ranked entries (1–5) with podium styling for top 3 (gold/silver/bronze borders + backgrounds)
+- Each entry shows: rank, icon (Crown/Medal/TrendingUp), player name, wins/games, win rate %
+- Placeholder note: "Leaderboard is populated with sample data."
+
+**Data flow:** Static sample data. Real online ranking coming in a future update.
 
 ---
 
@@ -328,8 +392,10 @@ Components import from `@/lib/game-engine` which resolves to this barrel file.
 1. `SoundConfig` defines frequency, duration, volume, waveform type, and noise flag
 2. `renderSfx(config)` creates an `OfflineAudioContext`, renders the tone to a buffer, converts to WAV, and returns a blob URL
 3. `SoundManager` singleton class manages:
+   - `muted: boolean` getter/setter — if true, `play()` does nothing
+   - `volume: number` getter/setter — clamped 0–1, applied to Howl instances on play
    - `init()` — renders all 6 sounds in parallel, creates Howl instances
-   - `play(name)` — plays a cached sound (async, waits for init)
+   - `play(name)` — plays a cached sound (checks muted, applies volume)
    - `stopAll()` — stops all playing sounds
    - `dispose()` — releases blob URLs and clears cache
 4. `bufferToWav()` — converts AudioBuffer to standard WAV format
@@ -344,6 +410,8 @@ Components import from `@/lib/game-engine` which resolves to this barrel file.
 | ladder_climb | sine | 300→700Hz | 0.3s | 0.18 | No |
 | win_fanfare | sine | 784Hz (G5) | 0.5s | 0.25 | No |
 | overshoot | triangle | 300→100Hz | 0.25s | 0.12 | No |
+
+**Settings sync:** `useSoundSettings` hook reads from localStorage and sets `soundManager.muted` and `soundManager.volume` on every change.
 
 ---
 
@@ -427,6 +495,31 @@ const { isLoading, isAuthenticated, user, signIn, signOut } = useAuth();
 - Uses `window.matchMedia` for breakpoint detection at 768px
 - Returns boolean `isMobile`
 
+### `src/hooks/use-sound-settings.ts` — Sound Settings
+
+**Purpose:** Manage sound on/off and volume state with localStorage persistence.
+
+**Functionality:**
+- Loads initial settings from localStorage key `saanp-roll-sound`
+- Returns `soundEnabled`, `soundVolume`, `setSoundEnabled`, `setSoundVolume`
+- On every settings change, syncs to `soundManager.muted` and `soundManager.volume`
+- Handles corrupt localStorage data gracefully with fallback to defaults `{ enabled: true, volume: 0.7 }`
+
+### `src/hooks/use-theme.ts` — Theme Hook
+
+**Purpose:** Convenience wrapper around `next-themes`'s `useTheme`.
+
+**Exports:**
+```typescript
+const { theme, isDark, setTheme, systemTheme, cycleTheme } = useAppTheme();
+```
+
+- `theme`: current setting ("light" | "dark" | "system")
+- `isDark`: whether the resolved theme is dark
+- `setTheme`: set a specific theme
+- `systemTheme`: OS-level preference
+- `cycleTheme`: cycle through light → dark → system
+
 ---
 
 ## 📁 `src/components/` — React Components
@@ -484,6 +577,22 @@ Game Play
   └── advanceTurn() → next player
 ```
 
+### Settings Flow
+```
+Settings page
+        │
+        ├── Appearance section
+        │     ├── Light button → setTheme("light")
+        │     ├── Dark button → setTheme("dark")
+        │     └── System button → setTheme("system")
+        │     └── next-themes persists to localStorage
+        │
+        └── Sound & Effects section
+              ├── Switch toggle → setSoundEnabled(bool)
+              ├── Volume slider → setSoundVolume(0-1)
+              └── useSoundSettings syncs to soundManager.muted/.volume
+```
+
 ### Auth Flow
 ```
 User clicks "Sign In" or "Get Started"
@@ -508,5 +617,6 @@ Convex Auth verifies → Redirect to /home
 4. **Procedural Audio:** No audio files to load — sounds are synthesized at runtime.
 5. **SVG Board:** Crisp at any resolution, easy to draw complex paths.
 6. **Framer Motion:** Consistent animation API across all components.
-7. **Dark Mode:** Full dark mode support via CSS custom properties.
-8. **Mobile First:** Responsive design with max-width containers and touch-friendly targets.
+7. **Dark Mode:** Full dark mode support via next-themes + CSS custom properties.
+8. **Settings Persistence:** Sound + theme preferences survive page reloads via localStorage.
+9. **Mobile First:** Responsive design with max-width containers and touch-friendly targets.

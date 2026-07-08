@@ -13,20 +13,24 @@
 - ✅ **Game Engine (Pure TypeScript):** All core game logic — dice rolls, movement, snakes, ladders, win detection, three-sixes forfeit, extra roll on 6, turn management. 22 unit tests passing.
 - ✅ **Board Rendering (SVG):** 10×10 zigzag grid with snake and ladder overlay paths. Player tokens with initials. Animated tile highlighting.
 - ✅ **Dice Roll (3D Animation):** Framer Motion rotateX/rotateY tumble effect with spring-loaded dot animations. Shine sweep during roll.
-- ✅ **Sound System (Howler.js + Web Audio API):** 6 procedurally synthesized sound effects — dice rattle, tile step, snake bite, ladder climb, win fanfare, overshoot. Async init with fire-and-forget playback.
+- ✅ **Sound System (Howler.js + Web Audio API):** 6 procedurally synthesized sound effects — dice rattle, tile step, snake bite, ladder climb, win fanfare, overshoot. Async init with fire-and-forget playback. Mute toggle and volume slider via `SoundManager.muted` + `SoundManager.volume`.
 - ✅ **Tile-by-Tile Movement Animation:** Player tokens step through each intermediate tile rather than teleporting. Snake/ladder timing aligned with visual animation.
 - ✅ **Game Setup UI:** 2–4 player configuration with name inputs, color indicators, board mode selection (Classic / Venom).
 - ✅ **Landing Page:** Modern themed marketing page with hero, feature cards, mode descriptions, CTAs.
 - ✅ **Home Page:** Dashboard with Play Local, Play Online (disabled/coming-soon), stats cards, match history/leaderboard buttons.
 - ✅ **Authentication:** Email OTP + anonymous sign-in via Convex Auth. Auth page at `/auth`.
-- ✅ **Routing:** All routes configured with lazy loading via React Suspense.
-- ✅ **Theme:** Full light/dark mode with custom oklch color tokens.
+- ✅ **Routing:** 9 routes configured with lazy loading via React Suspense: `/`, `/auth`, `/home`, `/game/setup`, `/game/play`, `/settings`, `/history`, `/leaderboard`, `/*` (404).
+- ✅ **Settings Page:** Fully functional Appearance (Light/Dark/System theme toggle via next-themes) and Sound & Effects (mute toggle + volume slider persisted to localStorage) sections. Placeholder cards for Notifications, Accessibility, Privacy, About.
+- ✅ **Match History Page:** Sample data with summary stats (total games, wins, best streak) and recent match list. Placeholder for real backend sync.
+- ✅ **Leaderboard Page:** Ranked entries with podium for top 3, win rates, and overview stats. Placeholder for real online ranking.
+- ✅ **Theme:** Full light/dark/system mode with custom oklch color tokens. `ThemeProvider` from next-themes wrapping the app.
+- ✅ **Sound Persistence:** `useSoundSettings` hook reads/writes sound preferences to localStorage. SoundManager singleton is synced on every change.
 
 ### 1.2 What's In Progress / Known Issues
 
 - **Play Online (Coming Soon):** The "Play Online" button on the home page is disabled with a "SOON" badge. Requires Phase 2 implementation with Convex game rooms.
-- **Match History / Leaderboard:** Buttons exist but navigate to `/history` and `/leaderboard` which redirect to 404. No backend implementation yet.
-- **Settings Page:** The settings gear icon navigates to `/settings` which doesn't exist yet.
+- **Match History / Leaderboard:** Currently populated with sample/static data. No Convex backend for real match recording yet.
+- **Settings - remaining sections:** Notifications, Accessibility, Privacy & Security, and About are placeholder "Soon" cards.
 - **Sound Auto-Play Policy:** Modern browsers require a user gesture before playing audio. The first dice tap initializes the AudioContext, but some browsers may briefly block the first `dice_roll` sound. No workaround needed — this is standard behavior.
 
 ### 1.3 Test Results
@@ -63,7 +67,7 @@
 
 ```
 src/
-├── main.tsx                    # App bootstrap, routing, providers
+├── main.tsx                    # App bootstrap, routing, providers (incl. ThemeProvider)
 ├── index.css                   # Global styles, theme tokens (oklch)
 ├── instrumentation.tsx         # Error boundary, Vly monitoring
 │
@@ -73,6 +77,9 @@ src/
 │   ├── Home.tsx                # /home — Dashboard hub
 │   ├── GameSetup.tsx           # /game/setup — Create new game
 │   ├── GamePlay.tsx            # /game/play — Active game
+│   ├── Settings.tsx            # /settings — Sound + Appearance controls
+│   ├── History.tsx             # /history — Match history (static)
+│   ├── Leaderboard.tsx         # /leaderboard — Top players (static)
 │   └── NotFound.tsx            # /* — 404 fallback
 │
 ├── components/
@@ -91,6 +98,7 @@ src/
 │   │   ├── engine.ts           # Core engine functions
 │   │   └── index.ts            # Public API re-exports
 │   ├── sounds.ts               # Procedural sound synthesis + Howler.js
+│   │                            # (includes muted/volume on SoundManager)
 │   ├── utils.ts                # cn() utility for class merging
 │   └── vly-integrations.ts     # Vly AI/email/payments integration config
 │
@@ -104,7 +112,9 @@ src/
 │
 ├── hooks/
 │   ├── use-auth.ts             # Auth hook wrapping Convex Auth
-│   └── use-mobile.ts           # Mobile breakpoint detection
+│   ├── use-mobile.ts           # Mobile breakpoint detection
+│   ├── use-sound-settings.ts   # Sound on/off + volume (localStorage)
+│   └── use-theme.ts            # Theme control wrapping next-themes
 │
 └── __tests__/                  # Game engine unit tests
     └── engine.test.ts          # 22 Vitest test cases
@@ -128,7 +138,7 @@ All engine functions return **new state objects** rather than mutating existing 
 
 ### 3.3 Procedural Audio
 
-Rather than bundling audio files, sounds are **synthesized at runtime** using the Web Audio API's `OfflineAudioContext`. This keeps the bundle small and avoids loading external assets. The audio is rendered once during `soundManager.init()`, cached, and played back via Howler.js.
+Rather than bundling audio files, sounds are **synthesized at runtime** using the Web Audio API's `OfflineAudioContext`. This keeps the bundle small and avoids loading external assets. The audio is rendered once during `soundManager.init()`, cached, and played back via Howler.js. The SoundManager exposes `muted` and `volume` properties which `useSoundSettings` syncs from localStorage.
 
 ### 3.4 SVG Board
 
@@ -145,6 +155,14 @@ All animations use Framer Motion for consistency:
 - Dice: 3D rotateX/rotateY keyframes with spring scales
 - Player tokens: layout animations on progress bars
 - Game over banner: spring-based entrance with scale + opacity
+
+### 3.6 Theme via next-themes
+
+The app uses `next-themes` for theme management with `attribute="class"` strategy (matching the `.dark` CSS class in `index.css`). The `ThemeProvider` wraps the entire app in `main.tsx` with `defaultTheme="system"` and `enableSystem` for OS-level preference detection. The `useAppTheme` hook provides convenience helpers.
+
+### 3.7 Settings Persistence
+
+Both sound settings and theme preference persist across sessions. Sound uses localStorage (`saanp-roll-sound` key) via `useSoundSettings`. Theme uses next-themes' built-in localStorage persistence.
 
 ---
 
@@ -230,6 +248,7 @@ Key files to create in Phase 2:
 | howler | ^2.2.4 | Audio playback |
 | convex | ^1.30.0 | Backend + database |
 | @convex-dev/auth | ^0.0.90 | Authentication |
+| next-themes | ^0.4.6 | Theme management |
 | tailwindcss | ^4.1.17 | Utility CSS |
 | @tailwindcss/vite | ^4.1.17 | Tailwind Vite plugin |
 | vite | ^7.2.6 | Build tool |

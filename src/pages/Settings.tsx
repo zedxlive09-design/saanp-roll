@@ -7,24 +7,21 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { LogoDropdown } from "@/components/LogoDropdown";
 import { useSoundSettings } from "@/hooks/use-sound-settings";
+import { useAppTheme } from "@/hooks/use-theme";
 import {
   ArrowLeft,
-  Palette,
   Bell,
   Volume2,
   VolumeX,
   Eye,
   Shield,
   Info,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 
 const soonSections = [
-  {
-    icon: Palette,
-    label: "Appearance",
-    description: "Theme, colors, and display preferences",
-    color: "#6366f1",
-  },
   {
     icon: Bell,
     label: "Notifications",
@@ -51,10 +48,17 @@ const soonSections = [
   },
 ];
 
+const themeOptions = [
+  { key: "light", icon: Sun, label: "Light" },
+  { key: "dark", icon: Moon, label: "Dark" },
+  { key: "system", icon: Monitor, label: "System" },
+] as const;
+
 export default function Settings() {
   const navigate = useNavigate();
   const { soundEnabled, soundVolume, setSoundEnabled, setSoundVolume } =
     useSoundSettings();
+  const { theme, setTheme } = useAppTheme();
 
   return (
     <motion.div
@@ -82,11 +86,81 @@ export default function Settings() {
         </p>
 
         <div className="space-y-3">
-          {/* Sound & Effects — fully functional */}
+          {/* Appearance — fully functional */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0 }}
+          >
+            <Card className="border shadow-sm">
+              <CardContent className="p-5 space-y-4">
+                {/* Header row */}
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-11 w-11 items-center justify-center rounded-xl shrink-0"
+                    style={{ backgroundColor: "#6366f115" }}
+                  >
+                    {theme === "dark" ? (
+                      <Moon className="h-5 w-5" style={{ color: "#6366f1" }} />
+                    ) : theme === "light" ? (
+                      <Sun className="h-5 w-5" style={{ color: "#6366f1" }} />
+                    ) : (
+                      <Monitor className="h-5 w-5" style={{ color: "#6366f1" }} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm">Appearance</p>
+                    <p className="text-xs text-muted-foreground">
+                      Theme, colors, and display preferences
+                    </p>
+                  </div>
+                </div>
+
+                {/* Theme selector */}
+                <div className="grid grid-cols-3 gap-2">
+                  {themeOptions.map((opt) => {
+                    const Icon = opt.icon;
+                    const isActive = theme === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setTheme(opt.key)}
+                        className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 transition-all cursor-pointer ${
+                          isActive
+                            ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 shadow-sm"
+                            : "border-border hover:border-muted-foreground/40 hover:bg-accent/30"
+                        }`}
+                      >
+                        <Icon
+                          className={`h-5 w-5 ${
+                            isActive
+                              ? "text-indigo-600 dark:text-indigo-400"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                        <span
+                          className={`text-[11px] font-medium ${
+                            isActive
+                              ? "text-indigo-600 dark:text-indigo-400"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {opt.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Sound & Effects — fully functional */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
           >
             <Card className="border shadow-sm">
               <CardContent className="p-5 space-y-4">

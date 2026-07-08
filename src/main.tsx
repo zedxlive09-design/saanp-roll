@@ -16,6 +16,9 @@ const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Home = lazy(() => import("./pages/Home.tsx"));
 const GameSetup = lazy(() => import("./pages/GameSetup.tsx"));
 const GamePlay = lazy(() => import("./pages/GamePlay.tsx"));
+const Settings = lazy(() => import("./pages/Settings.tsx"));
+const History = lazy(() => import("./pages/History.tsx"));
+const Leaderboard = lazy(() => import("./pages/Leaderboard.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Simple loading fallback for route transitions
@@ -69,6 +72,9 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/home" element={<Home />} />
               <Route path="/game/setup" element={<GameSetup />} />
               <Route path="/game/play" element={<GamePlay />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

@@ -155,7 +155,7 @@ function writeString(view: DataView, offset: number, string: string) {
 // Sound effect synthesizer
 // ---------------------------------------------------------------------------
 
-export type SoundEffect = "dice_roll" | "tile_step" | "snake_bite" | "ladder_climb" | "win_fanfare" | "overshoot";
+export type SoundEffect = "dice_roll" | "tile_step" | "snake_bite" | "ladder_climb" | "win_fanfare" | "overshoot" | "reconnect_chime";
 
 class SoundManager {
   private cache = new Map<SoundEffect, Howl>();
@@ -223,6 +223,12 @@ class SoundManager {
         duration: 0.25,
         volume: 0.12,
         type: "triangle",
+      }),
+      this.register("reconnect_chime", {
+        freq: [523, 784], // C5 → G5 cheerful ascending chime
+        duration: 0.35,
+        volume: 0.15,
+        type: "sine",
       }),
     ]).then(() => {});
   }

@@ -50,6 +50,7 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   const animTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const skippedRef = useRef<string | null>(null); // prevent duplicate skips
+  const prevDisconnectedRef = useRef<Set<string> | null>(null);
 
   // Initialize sound on mount, leave on unmount
   useEffect(() => {
@@ -72,6 +73,35 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
       }
     };
   }, []);
+
+  // Detect player reconnections and play chime for all connected players
+  useEffect(() => {
+    if (!game) return;
+
+    const currentlyDisconnected = new Set<string>();
+    game.players.forEach((p) => {
+      if (!p.isConnected) currentlyDisconnected.add(p.userId);
+    });
+
+    // First run — just store the initial disconnected set, no chime
+    if (prevDisconnectedRef.current === null) {
+      prevDisconnectedRef.current = currentlyDisconnected;
+      return;
+    }
+
+    const prev = prevDisconnectedRef.current;
+
+    // Check if any previously-disconnected player is now connected
+    for (const playerId of prev) {
+      if (!currentlyDisconnected.has(playerId)) {
+        // This player reconnected! Play the chime for all connected players
+        soundManager.play("reconnect_chime");
+        break; // One chime is enough, even if multiple reconnect at once
+      }
+    }
+
+    prevDisconnectedRef.current = currentlyDisconnected;
+  }, [game?.players]);
 
   // --- Turn Timer ---
   useEffect(() => {

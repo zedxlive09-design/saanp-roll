@@ -1,0 +1,1 @@
+import{a as e}from"./use-auth-rRJIPZVt.js";import{E as c,G as a}from"./index-HapoVSPW.js";function l(s){const m=c(e.games.getGame,s?{roomCode:s}:"skip"),t=a(e.games.createGame),n=a(e.games.joinGame),o=a(e.games.startGame),r=a(e.games.rollDiceOnline),i=a(e.games.leaveGame);return{game:m,createGame:t,joinGame:n,startGame:o,rollDiceOnline:r,leaveGame:i}}export{l as u};

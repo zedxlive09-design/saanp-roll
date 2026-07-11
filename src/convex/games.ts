@@ -205,6 +205,7 @@ export const createGame = mutation({
       winnerId: undefined,
       lastRoll: undefined,
       moveLog: [],
+      turnStartedAt: Date.now(),
       createdAt: Date.now(),
     });
 
@@ -284,6 +285,7 @@ export const startGame = mutation({
 
     await ctx.db.patch(gameId, {
       status: "playing",
+      turnStartedAt: Date.now(),
       moveLog: [`Game started with ${joinedPlayers.length} players!`],
     });
   },
@@ -355,12 +357,18 @@ export const rollDiceOnline = mutation({
       };
     });
 
+    const isNewPhase =
+      finalState.turnPhase === "next_player" ||
+      finalState.status === "game_over" ||
+      finalState.turnPhase === "extra_roll";
+
     const update: Record<string, unknown> = {
       players: dbPlayers,
       currentPlayerIndex: finalState.currentPlayerIndex,
       turnPhase: finalState.turnPhase,
       lastRoll: roll,
       moveLog: finalState.moveLog,
+      turnStartedAt: isNewPhase ? Date.now() : game.turnStartedAt,
     };
 
     if (finalState.status === "game_over") {
@@ -398,5 +406,47 @@ export const leaveGame = mutation({
     );
 
     await ctx.db.patch(gameId, { players: updatedPlayers });
+  },
+});
+
+/**
+ * Skip the current player's turn (auto-advance).
+ * Used when the turn timer expires (30s timeout).
+ * Only skips if it's still the same player's turn.
+ */
+export const skipTurn = mutation({
+  args: {
+    gameId: v.id("games"),
+  },
+  handler: async (ctx, { gameId }) => {
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "playing") throw new Error("Game is not in progress");
+
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (!currentPlayer) throw new Error("No current player");
+
+    const nextIndex =
+      (game.currentPlayerIndex + 1) % game.players.length;
+
+    // Reset consecutive sixes for the next player
+    const updatedPlayers = game.players.map((p, i) =>
+      i === nextIndex ? { ...p, consecutiveSixes: 0 } : p,
+    );
+
+    const reason = currentPlayer.isConnected
+      ? "turn timed out"
+      : "player disconnected";
+
+    await ctx.db.patch(gameId, {
+      players: updatedPlayers,
+      currentPlayerIndex: nextIndex,
+      turnPhase: "rolling",
+      turnStartedAt: Date.now(),
+      moveLog: [
+        ...game.moveLog,
+        `⏱️ ${currentPlayer.name}'s ${reason} — skipping to ${game.players[nextIndex].name}`,
+      ],
+    });
   },
 });

@@ -53,6 +53,7 @@ const schema = defineSchema(
       winnerId: v.optional(v.string()),
       lastRoll: v.optional(v.number()),
       moveLog: v.array(v.string()),
+      turnStartedAt: v.number(), // timestamp when current turn began
       createdAt: v.number(),
     })
       .index("by_roomCode", ["roomCode"])

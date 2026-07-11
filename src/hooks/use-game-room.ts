@@ -14,6 +14,7 @@ export function useGameRoom(roomCode: string | null) {
   const startGame = useMutation(api.games.startGame);
   const rollDiceOnline = useMutation(api.games.rollDiceOnline);
   const leaveGame = useMutation(api.games.leaveGame);
+  const skipTurn = useMutation(api.games.skipTurn);
 
   return {
     game,
@@ -22,5 +23,6 @@ export function useGameRoom(roomCode: string | null) {
     startGame,
     rollDiceOnline,
     leaveGame,
+    skipTurn,
   };
 }

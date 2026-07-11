@@ -9,10 +9,18 @@ import { useGameRoom } from "@/hooks/use-game-room";
 import { useAuth } from "@/hooks/use-auth";
 import { BOARD_CONFIGS, getSnakeTail, getLadderTop } from "@/lib/game-engine";
 import { soundManager } from "@/lib/sounds";
-import { ArrowLeft, RefreshCw, ScrollText, Wifi, WifiOff } from "lucide-react";
+import {
+  ArrowLeft,
+  RefreshCw,
+  ScrollText,
+  Wifi,
+  Timer,
+  Clock,
+} from "lucide-react";
 import { toast } from "sonner";
 
 const TILE_STEP_DELAY = 60;
+const TURN_TIMEOUT_SECONDS = 30;
 
 export default function OnlineGamePlay() {
   const { roomCode } = useParams<{ roomCode: string }>();
@@ -29,7 +37,8 @@ export default function OnlineGamePlay() {
 
 function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   const navigate = useNavigate();
-  const { game, rollDiceOnline, leaveGame } = useGameRoom(roomCode);
+  const { game, rollDiceOnline, leaveGame, skipTurn } =
+    useGameRoom(roomCode);
   const [isResolving, setIsResolving] = useState(false);
   const [lastRollValue, setLastRollValue] = useState<number | null>(null);
   const [showMoveLog, setShowMoveLog] = useState(false);
@@ -37,8 +46,10 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   const [animatedPositions, setAnimatedPositions] = useState<
     Record<string, number>
   >({});
+  const [timeLeft, setTimeLeft] = useState(TURN_TIMEOUT_SECONDS);
   const animTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const skippedRef = useRef<string | null>(null); // prevent duplicate skips
 
   // Initialize sound on mount, leave on unmount
   useEffect(() => {
@@ -61,6 +72,48 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
       }
     };
   }, []);
+
+  // --- Turn Timer ---
+  useEffect(() => {
+    if (!game || game.status !== "playing") return;
+
+    const tick = () => {
+      const elapsed = Math.floor(
+        (Date.now() - game.turnStartedAt) / 1000,
+      );
+      const remaining = Math.max(0, TURN_TIMEOUT_SECONDS - elapsed);
+      setTimeLeft(remaining);
+    };
+
+    // Initial tick
+    tick();
+
+    const interval = setInterval(tick, 200);
+    return () => clearInterval(interval);
+  }, [game?._id, game?.status, game?.turnStartedAt, game?.currentPlayerIndex]);
+
+  // Auto-skip when timer hits 0
+  useEffect(() => {
+    if (!game || game.status !== "playing" || timeLeft > 0) return;
+
+    // Create a unique key for this turn to prevent double-skips
+    const turnKey = `${game.currentPlayerIndex}-${game.turnStartedAt}`;
+    if (skippedRef.current === turnKey) return;
+    skippedRef.current = turnKey;
+
+    const doSkip = async () => {
+      try {
+        await skipTurn({ gameId: game._id as any });
+        soundManager.play("overshoot");
+        toast.info("Turn skipped — timed out", {
+          duration: 2000,
+        });
+      } catch (err) {
+        // Ignore skip errors (might have been skipped already)
+      }
+    };
+    doSkip();
+  }, [timeLeft, game, skipTurn]);
 
   if (!game) {
     return (
@@ -87,6 +140,12 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   const winner = game.players.find((p) => p.userId === game.winnerId);
   const currentPlayer = game.players[game.currentPlayerIndex];
   const isExtraRoll = game.turnPhase === "extra_roll";
+  const currentPlayerDisconnected = currentPlayer && !currentPlayer.isConnected;
+  const timerUrgent = timeLeft <= 10;
+  const timerCritical = timeLeft <= 5;
+
+  // Timer display value
+  const timerPercent = (timeLeft / TURN_TIMEOUT_SECONDS) * 100;
 
   // Derive display positions with animation support
   const displayPlayers = game.players.map((p) => ({
@@ -110,12 +169,6 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
       const rawNewPos = player.position + roll;
       const didOvershoot = rawNewPos > 100;
 
-      // Find post-roll final position from the game state
-      // Since the server already updated the state, find the player's new position
-      const nextPlayerIdx = game.currentPlayerIndex;
-      const nextPlayer = game.players[nextPlayerIdx];
-      // The state shown is already the post-roll state (since server updates before client animates)
-      // We need to derive where they'll land
       const landingTile = didOvershoot
         ? player.position
         : Math.min(rawNewPos, 100);
@@ -167,7 +220,6 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
             clearInterval(stepInterval);
 
             const finalizeTimeout = setTimeout(() => {
-              // After animation, show server-confirmed position
               setHighlightedTile(null);
               setIsResolving(false);
               setAnimatedPositions({});
@@ -191,7 +243,6 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
     if (!game?._id) return 0;
     try {
       const result = await rollDiceOnline({ gameId: game._id as any });
-      // The game state is updated reactively via the query
       return result.roll;
     } catch (err) {
       toast.error(
@@ -327,16 +378,33 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
                   {currentPlayer?.name.charAt(0)}
                 </div>
                 <div>
-                  <p className="font-semibold text-sm">
+                  <p className="font-semibold text-sm flex items-center gap-2">
                     {currentPlayer?.name}'s Turn
                     {isExtraRoll && (
                       <Badge
                         variant="secondary"
-                        className="ml-2 text-[10px] bg-amber-100 text-amber-700"
+                        className="text-[10px] bg-amber-100 text-amber-700"
                       >
                         Extra Roll
                       </Badge>
                     )}
+                    {/* Turn Timer */}
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-mono font-medium ${
+                        timerCritical
+                          ? "text-red-600 dark:text-red-400"
+                          : timerUrgent
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      <Clock
+                        className={`h-3 w-3 ${
+                          timerCritical ? "animate-pulse" : ""
+                        }`}
+                      />
+                      {timeLeft}s
+                    </span>
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Position: {currentPlayer?.position || 0}
@@ -351,26 +419,57 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
                   </p>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="flex flex-col items-end gap-1">
                 <p className="text-2xl font-bold font-mono">
                   {currentPlayer?.position || 0}
                 </p>
                 <p className="text-[10px] text-muted-foreground">/ 100</p>
+                {/* Timer progress bar */}
+                <div className="w-16 h-1 rounded-full bg-secondary overflow-hidden">
+                  <motion.div
+                    className={`h-full rounded-full ${
+                      timerCritical
+                        ? "bg-red-500"
+                        : timerUrgent
+                          ? "bg-amber-500"
+                          : "bg-indigo-400"
+                    }`}
+                    animate={{ width: `${timerPercent}%` }}
+                    transition={{ duration: 0.2 }}
+                  />
+                </div>
               </div>
             </motion.div>
 
             <div className="flex flex-col items-center py-2">
+              {/* Timer warning banner */}
+              {currentPlayerDisconnected && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30 px-4 py-2 text-xs text-red-700 dark:text-red-400"
+                >
+                  <Timer className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {currentPlayer.name} disconnected — auto-skipping in{" "}
+                    <span className="font-mono font-bold">{timeLeft}s</span>
+                  </span>
+                </motion.div>
+              )}
+
               <DiceRoll
                 onRoll={handleRoll}
                 serverRoll={handleServerRoll}
-                disabled={isResolving || isGameOver}
+                disabled={isResolving || isGameOver || currentPlayerDisconnected}
                 currentPlayerColor={currentPlayer?.color}
                 isExtraRoll={isExtraRoll}
               />
               <p className="text-xs text-muted-foreground mt-2">
                 {isResolving
                   ? "Moving piece..."
-                  : "Tap the dice to roll"}
+                  : currentPlayerDisconnected
+                    ? "Waiting for auto-skip..."
+                    : "Tap the dice to roll"}
               </p>
             </div>
           </div>
@@ -402,15 +501,34 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
                   {player.name.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
+                  <p className="text-sm font-medium truncate flex items-center gap-1.5">
                     {player.name}
                     {!dbPlayer?.isConnected && (
-                      <span className="ml-1.5 text-[11px] text-muted-foreground italic">
+                      <span className="text-[11px] text-muted-foreground italic">
                         (disconnected)
                       </span>
                     )}
                     {winner?.userId === player.id && (
-                      <span className="ml-1.5">👑</span>
+                      <span className="ml-0.5">👑</span>
+                    )}
+                    {/* Timer badge for current player */}
+                    {isCurrent && (
+                      <span
+                        className={`inline-flex items-center gap-0.5 text-[10px] font-mono ${
+                          timerCritical
+                            ? "text-red-500"
+                            : timerUrgent
+                              ? "text-amber-500"
+                              : "text-muted-foreground"
+                        }`}
+                      >
+                        <Clock
+                          className={`h-2.5 w-2.5 ${
+                            timerCritical ? "animate-pulse" : ""
+                          }`}
+                        />
+                        {timeLeft}s
+                      </span>
                     )}
                   </p>
                 </div>

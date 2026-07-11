@@ -118,6 +118,32 @@ export const getLeaderboard = query({
   },
 });
 
+/** Get active games for the current user (waiting or playing, not finished). */
+export const getUserActiveGames = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    const waitingGames = await ctx.db
+      .query("games")
+      .withIndex("by_status", (q) => q.eq("status", "waiting"))
+      .order("desc")
+      .take(20);
+
+    const playingGames = await ctx.db
+      .query("games")
+      .withIndex("by_status", (q) => q.eq("status", "playing"))
+      .order("desc")
+      .take(20);
+
+    const activeGames = [...waitingGames, ...playingGames];
+    return activeGames.filter((g) =>
+      g.players.some((p) => p.userId === userId),
+    );
+  },
+});
+
 /** Get stats (total games, wins, losses) for the current user. */
 export const getUserStats = query({
   args: {},

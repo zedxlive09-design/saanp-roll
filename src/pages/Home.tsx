@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Swords,
   Users,
@@ -13,6 +14,8 @@ import {
   Dice1,
   ScrollText,
   Loader2,
+  RefreshCw,
+  WifiOff,
 } from "lucide-react";
 import { LogoDropdown } from "@/components/LogoDropdown";
 import { useAuth } from "@/hooks/use-auth";
@@ -57,10 +60,15 @@ export default function Home() {
   const { isAuthenticated } = useAuth();
 
   const userStats = useQuery(api.games.getUserStats);
+  const activeGames = useQuery(api.games.getUserActiveGames);
   const statsLoading = userStats === undefined;
+  const activeGamesLoading = activeGames === undefined;
 
   const gamesWon = userStats?.wins ?? 0;
   const gamesPlayed = userStats?.totalGames ?? 0;
+
+  // Games the user can reconnect to — query already filtered to user's games
+  const reconnectGames = activeGames ?? [];
 
   return (
     <motion.div
@@ -108,7 +116,97 @@ export default function Home() {
           />
         </div>
 
-        {/* Play Local */}
+        {/* Reconnect banner — active games */}
+        {!activeGamesLoading && reconnectGames.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-2"
+          >
+            {reconnectGames.map((g) => {
+              const isPlaying = g.status === "playing";
+              const isDisconnected =
+                isPlaying &&
+                g.players.some((p) => p.userId && !p.isConnected);
+              const roomCode = g.roomCode;
+              const boardName =
+                g.boardId === "venom" ? "Venom Mode" : "Classic";
+              const playerCount = g.players.filter((p) => p.userId).length;
+
+              return (
+                <Card
+                  key={g._id}
+                  className={`border-2 shadow-sm overflow-hidden ${
+                    isPlaying
+                      ? "border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/10"
+                      : "border-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/10"
+                  }`}
+                >
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div
+                      className={`flex h-12 w-12 items-center justify-center rounded-xl shrink-0 ${
+                        isPlaying
+                          ? "bg-emerald-100 dark:bg-emerald-900/40"
+                          : "bg-indigo-100 dark:bg-indigo-900/40"
+                      }`}
+                    >
+                      {isPlaying ? (
+                        <Wifi className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <Users className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold flex items-center gap-2">
+                        {isPlaying
+                          ? isDisconnected
+                            ? "Disconnected from game"
+                            : "Active game in progress"
+                          : "Waiting in lobby"}
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] font-mono"
+                        >
+                          {roomCode}
+                        </Badge>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {boardName} · {playerCount} player
+                        {playerCount !== 1 ? "s" : ""}
+                        {isDisconnected && (
+                          <span className="ml-2 text-amber-600 dark:text-amber-400 font-medium">
+                            · Disconnected
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <Button
+                      variant={isDisconnected ? "default" : "outline"}
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() =>
+                        navigate(
+                          isPlaying
+                            ? `/game/online/${roomCode}`
+                            : `/lobby`,
+                        )
+                      }
+                    >
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                      {isDisconnected
+                        ? "Reconnect"
+                        : isPlaying
+                          ? "Resume"
+                          : "Back to Lobby"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </motion.div>
+        )}
+
+      {/* Play Local */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

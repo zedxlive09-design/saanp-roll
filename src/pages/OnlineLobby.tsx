@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,6 +24,8 @@ import {
   Loader2,
   Link as LinkIcon,
   Skull,
+  RefreshCw,
+  Wifi,
 } from "lucide-react";
 
 type LobbyPhase = "menu" | "creating" | "joining" | "waiting" | "starting";
@@ -29,6 +33,8 @@ type LobbyPhase = "menu" | "creating" | "joining" | "waiting" | "starting";
 export default function OnlineLobby() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
+  const activeGames = useQuery(api.games.getUserActiveGames);
+  const activeGamesLoading = activeGames === undefined;
 
   const [phase, setPhase] = useState<LobbyPhase>("menu");
   const [roomCode, setRoomCode] = useState("");
@@ -152,6 +158,83 @@ export default function OnlineLobby() {
               <p className="text-sm text-muted-foreground">
                 Create a room and share the code, or join an existing game.
               </p>
+
+              {/* Reconnect card — games in progress or waiting */}
+              {!activeGamesLoading &&
+                activeGames &&
+                activeGames.length > 0 && (
+                  <Card className="border-2 border-emerald-300/50 bg-gradient-to-r from-emerald-50/80 to-teal-50/80 dark:from-emerald-950/20 dark:to-teal-950/20 shadow-sm">
+                    <CardContent className="p-4 space-y-3">
+                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Active Games
+                      </p>
+                      <div className="space-y-2">
+                        {activeGames.map((g) => {
+                          const isPlaying = g.status === "playing";
+                          const roomCode = g.roomCode;
+                          const boardName =
+                            g.boardId === "venom"
+                              ? "Venom Mode"
+                              : "Classic";
+                          const playerCount = g.players.filter(
+                            (p) => p.userId,
+                          ).length;
+
+                          return (
+                            <div
+                              key={g._id}
+                              className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <Wifi
+                                  className={`h-4 w-4 shrink-0 ${
+                                    isPlaying
+                                      ? "text-emerald-500"
+                                      : "text-indigo-500"
+                                  }`}
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">
+                                    {boardName}
+                                    <Badge
+                                      variant="outline"
+                                      className="ml-2 text-[10px] font-mono"
+                                    >
+                                      {roomCode}
+                                    </Badge>
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {isPlaying
+                                      ? "In progress"
+                                      : "Waiting in lobby"}
+                                    · {playerCount} player
+                                    {playerCount !== 1 ? "s" : ""}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0 ml-2"
+                                onClick={() =>
+                                  navigate(
+                                    isPlaying
+                                      ? `/game/online/${roomCode}`
+                                      : `/lobby`,
+                                  )
+                                }
+                              >
+                                <RefreshCw className="mr-1 h-3 w-3" />
+                                {isPlaying ? "Reconnect" : "Lobby"}
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
               {/* Create Room */}
               <Card className="border shadow-sm">

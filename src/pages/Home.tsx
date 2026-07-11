@@ -1,5 +1,7 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -10,32 +12,40 @@ import {
   Settings,
   Dice1,
   ScrollText,
+  Loader2,
 } from "lucide-react";
 import { LogoDropdown } from "@/components/LogoDropdown";
+import { useAuth } from "@/hooks/use-auth";
 
 function StatCard({
   icon: Icon,
   label,
   value,
   color,
+  isLoading: statLoading,
 }: {
   icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   label: string;
   value: string;
   color: string;
+  isLoading?: boolean;
 }) {
   return (
     <Card className="border shadow-sm">
       <CardContent className="flex items-center gap-3 p-4">
         <div
-          className="flex h-10 w-10 items-center justify-center rounded-lg"
+          className="flex h-10 w-10 items-center justify-center rounded-lg shrink-0"
           style={{ backgroundColor: `${color}15` }}
         >
           <Icon className="h-5 w-5" style={{ color }} />
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-muted-foreground">{label}</p>
-          <p className="text-lg font-bold">{value}</p>
+          {statLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mt-0.5" />
+          ) : (
+            <p className="text-lg font-bold">{value}</p>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -44,6 +54,13 @@ function StatCard({
 
 export default function Home() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+
+  const userStats = useQuery(api.games.getUserStats);
+  const statsLoading = userStats === undefined;
+
+  const gamesWon = userStats?.wins ?? 0;
+  const gamesPlayed = userStats?.totalGames ?? 0;
 
   return (
     <motion.div
@@ -73,19 +90,21 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
-        {/* Stats row */}
+        {/* Live stats from Convex */}
         <div className="grid grid-cols-2 gap-3">
           <StatCard
             icon={Trophy}
             label="Games Won"
-            value="0"
+            value={String(gamesWon)}
             color="#eab308"
+            isLoading={statsLoading}
           />
           <StatCard
             icon={Dice1}
             label="Games Played"
-            value="0"
+            value={String(gamesPlayed)}
             color="#6366f1"
+            isLoading={statsLoading}
           />
         </div>
 
@@ -162,6 +181,27 @@ export default function Home() {
             <span className="text-xs">Leaderboard</span>
           </Button>
         </div>
+
+        {/* Auth hint */}
+        {!isAuthenticated && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="text-center py-2"
+          >
+            <p className="text-xs text-muted-foreground">
+              <Button
+                variant="link"
+                className="h-auto p-0 text-xs underline"
+                onClick={() => navigate("/auth")}
+              >
+                Sign in
+              </Button>{" "}
+              to track stats and save progress across sessions
+            </p>
+          </motion.div>
+        )}
       </main>
     </motion.div>
   );

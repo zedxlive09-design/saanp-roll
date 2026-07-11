@@ -55,6 +55,97 @@ export const getAvailableGames = query({
   },
 });
 
+/** Get the current user's finished games for match history. */
+export const getUserGames = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    const games = await ctx.db
+      .query("games")
+      .withIndex("by_status", (q) => q.eq("status", "finished"))
+      .order("desc")
+      .take(50);
+
+    return games.filter((g) => g.players.some((p) => p.userId === userId));
+  },
+});
+
+/** Get aggregated leaderboard stats from all finished games. */
+export const getLeaderboard = query({
+  args: {},
+  handler: async (ctx) => {
+    const games = await ctx.db
+      .query("games")
+      .withIndex("by_status", (q) => q.eq("status", "finished"))
+      .order("desc")
+      .take(100);
+
+    // Aggregate stats per player userId
+    const statsMap = new Map<
+      string,
+      { name: string; wins: number; games: number; color: string }
+    >();
+
+    for (const game of games) {
+      for (const player of game.players) {
+        if (!player.userId) continue;
+        const existing = statsMap.get(player.userId) ?? {
+          name: player.name,
+          wins: 0,
+          games: 0,
+          color: player.color,
+        };
+        existing.games++;
+        if (game.winnerId === player.userId) existing.wins++;
+        statsMap.set(player.userId, existing);
+      }
+    }
+
+    return [...statsMap.entries()]
+      .map(([userId, s]) => ({
+        userId,
+        name: s.name,
+        wins: s.wins,
+        games: s.games,
+        color: s.color,
+        winRate:
+          s.games > 0 ? Math.round((s.wins / s.games) * 100) : 0,
+      }))
+      .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate)
+      .slice(0, 50);
+  },
+});
+
+/** Get stats (total games, wins, losses) for the current user. */
+export const getUserStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return { totalGames: 0, wins: 0, losses: 0 };
+    }
+
+    const games = await ctx.db
+      .query("games")
+      .withIndex("by_status", (q) => q.eq("status", "finished"))
+      .order("desc")
+      .take(100);
+
+    const userGames = games.filter((g) =>
+      g.players.some((p) => p.userId === userId),
+    );
+    const wins = userGames.filter((g) => g.winnerId === userId).length;
+
+    return {
+      totalGames: userGames.length,
+      wins,
+      losses: userGames.length - wins,
+    };
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------

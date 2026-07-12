@@ -84,10 +84,12 @@ export function useMatchmaking() {
 }
 
 /**
- * Returns a stable anonymous ID from localStorage. Generates one on first call.
+ * Returns a stable anonymous ID from localStorage. Exported so
+ * components can check isMyTurn for guest players.
+ * The internal useAnonId Generates one on first call.
  * Used so guest users can use Quick Match without signing in.
  */
-function useAnonId(): string | null {
+export function useAnonId(): string | null {
   const [id, setId] = useState<string | null>(null);
 
   useEffect(() => {

@@ -3,7 +3,7 @@ import { useNavigate, useParams, Navigate } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { Board } from "@/components/game/Board";
 import { DiceRoll } from "@/components/game/DiceRoll";
-import { useGameRoom } from "@/hooks/use-game-room";
+import { useGameRoom, useAnonId } from "@/hooks/use-game-room";
 import { useAuth } from "@/hooks/use-auth";
 import { BOARD_CONFIGS, getSnakeTail, getLadderTop } from "@/lib/game-engine";
 import { soundManager } from "@/lib/sounds";
@@ -70,7 +70,9 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   // Local Convex user id — used to detect "is it my turn?" and to disable
   // the dice during opponent / bot turns.
   const { user } = useAuth();
-  const myUserId = (user?._id as string | undefined) ?? null;
+  const anonId = useAnonId();
+  // For authenticated users, use their Convex ID. For guests, use "anon-{uuid}".
+  const myUserId = (user?._id as string | undefined) ?? (anonId ? `anon-${anonId}` : null);
   const [isResolving, setIsResolving] = useState(false);
   // Synchronous mirror of isResolving for dice-debounce (rapid taps can slip
   // through React state since setState is async within a frame).

@@ -5,17 +5,26 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "./use-auth";
 
 export function useGameRoom(roomCode: string | null) {
+  const anonId = useAnonId();
   const game = useQuery(
     api.games.getGame,
     roomCode ? { roomCode } : "skip",
   );
 
-  const createGame = useMutation(api.games.createGame);
-  const joinGame = useMutation(api.games.joinGame);
-  const startGame = useMutation(api.games.startGame);
-  const rollDiceOnline = useMutation(api.games.rollDiceOnline);
-  const leaveGame = useMutation(api.games.leaveGame);
-  const skipTurn = useMutation(api.games.skipTurn);
+  const createGameMutation = useMutation(api.games.createGame);
+  const joinGameMutation = useMutation(api.games.joinGame);
+  const startGameMutation = useMutation(api.games.startGame);
+  const rollDiceOnlineMutation = useMutation(api.games.rollDiceOnline);
+  const leaveGameMutation = useMutation(api.games.leaveGame);
+  const skipTurnMutation = useMutation(api.games.skipTurn);
+
+  // Wrappers that pass the anonId for guest users
+  const createGame = (args: any) => createGameMutation({ ...args, anonId });
+  const joinGame = (args: any) => joinGameMutation({ ...args, anonId });
+  const startGame = (args: any) => startGameMutation({ ...args, anonId });
+  const rollDiceOnline = (args: any) => rollDiceOnlineMutation({ ...args, anonId });
+  const leaveGame = (args: any) => leaveGameMutation({ ...args, anonId });
+  const skipTurn = (args: any) => skipTurnMutation({ ...args, anonId });
 
   return {
     game,

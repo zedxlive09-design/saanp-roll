@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft,
   Copy,
+  Share2,
   Check,
   Users,
   Play,
@@ -231,6 +232,28 @@ export default function OnlineLobby() {
     navigator.clipboard.writeText(createCode || joinCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareLink = async () => {
+    const code = createCode || joinCode;
+    if (!code) return;
+    const url = `${window.location.origin}/game/online/${code}`;
+    const shareData = {
+      title: "Saanp Seedhi — Join my game!",
+      text: `Join my Snakes & Ladders game. Room code: ${code}`,
+      url,
+    };
+    // Try the Web Share API first (mobile/Capacitor), fall back to clipboard
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch {
+        // User cancelled or share failed — fall back to clipboard
+      }
+    }
+    navigator.clipboard.writeText(url);
+    toast.success("Invite link copied!");
   };
 
   const isHost =
@@ -821,6 +844,13 @@ export default function OnlineLobby() {
                     <p className="mt-3 text-xs text-white/55">
                       Share this code with friends to join the game
                     </p>
+                    <button
+                      onClick={shareLink}
+                      className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/15 font-semibold text-primary backdrop-blur-md transition-colors hover:bg-primary/25"
+                    >
+                      <Share2 className="h-4 w-4" />
+                      Share Invite Link
+                    </button>
                   </div>
 
                   {/* Players list — translucent game card */}

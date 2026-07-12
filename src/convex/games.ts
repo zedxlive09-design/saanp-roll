@@ -510,14 +510,16 @@ export async function performGameRoll(
 export const rollDiceOnline = mutation({
   args: {
     gameId: v.id("games"),
+    anonId: v.optional(v.string()),
   },
-  handler: async (ctx, { gameId }) => {
+  handler: async (ctx, { gameId, anonId }) => {
     const game = await ctx.db.get(gameId);
     if (!game) throw new Error("Game not found");
     if (game.status !== "playing") throw new Error("Game is not in progress");
 
     const userId = await getAuthUserId(ctx);
-    const playerId = userId ?? `anon-${crypto.randomUUID()}`;
+    const playerId = userId ?? (anonId ? `anon-${anonId}` : null);
+    if (!playerId) throw new Error("Not authenticated");
 
     // Validate it's this player's turn
     const currentPlayer = game.players[game.currentPlayerIndex];
@@ -546,17 +548,21 @@ export const rollDiceOnline = mutation({
 export const leaveGame = mutation({
   args: {
     gameId: v.id("games"),
+    anonId: v.optional(v.string()),
   },
   handler: async (
     ctx,
-    { gameId },
+    { gameId, anonId },
   ): Promise<{
     status: string;
     outcome: "removed" | "defeat" | "won_by_default" | "no_op";
     potAwarded?: number;
   }> => {
     const userId = await getAuthUserId(ctx);
-    const playerId = userId ?? `anon-${crypto.randomUUID()}`;
+    const playerId = userId ?? (anonId ? `anon-${anonId}` : null);
+    if (!playerId) {
+      return { status: "finished", outcome: "no_op" };
+    }
 
     const game = await ctx.db.get(gameId);
     if (!game) throw new Error("Game not found");

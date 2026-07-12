@@ -196,3 +196,23 @@
     padding-right: env(safe-area-inset-right);
   }
 }
+
+/* Dice tumble animation */
+@keyframes dice-tumble {
+  0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+  25% { transform: translate(-50%, -50%) rotate(90deg) scale(1.1) translateY(-8px); }
+  50% { transform: translate(-50%, -50%) rotate(180deg) scale(1) translateY(0); }
+  75% { transform: translate(-50%, -50%) rotate(270deg) scale(1.1) translateY(-6px); }
+  100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); }
+}
+.dice-tumble {
+  animation: dice-tumble 0.18s linear infinite;
+}
+@keyframes dice-settle {
+  0% { transform: translate(-50%, -50%) rotate(0deg) scale(1.15); }
+  60% { transform: translate(-50%, -50%) rotate(-5deg) scale(0.95); }
+  100% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+}
+.dice-settle {
+  animation: dice-settle 0.25s ease-out;
+}

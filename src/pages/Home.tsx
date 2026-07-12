@@ -75,7 +75,7 @@ export default function Home() {
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="mx-auto mt-3 max-w-2xl px-4 safe-top"
+          className="mx-auto mt-3 max-w-2xl px-4"
         >
           <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-black/30 p-3 backdrop-blur-md">
             {/* Avatar */}
@@ -309,7 +309,7 @@ export default function Home() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
-          className="mx-auto mt-6 max-w-2xl px-4 pb-8 safe-bottom"
+          className="mx-auto mt-6 max-w-2xl px-4 pb-8"
         >
           <div className="grid grid-cols-3 gap-3">
             <motion.button

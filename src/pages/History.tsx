@@ -98,13 +98,13 @@ export default function History() {
         <button
           onClick={() => navigate("/home")}
           aria-label="Back"
-          className="absolute left-4 top-4 z-30 flex size-11 items-center justify-center rounded-2xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white safe-top"
+          className="absolute left-4 top-4 z-30 flex size-11 items-center justify-center rounded-2xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white"
         >
           <ArrowLeft className="size-5" />
         </button>
 
         {/* Page title */}
-        <div className="mx-auto max-w-2xl px-4 pt-6 pb-2 safe-top">
+        <div className="mx-auto max-w-2xl px-4 pt-6 pb-2">
           <motion.div
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -120,7 +120,7 @@ export default function History() {
           </motion.div>
         </div>
 
-        <main className="mx-auto max-w-2xl space-y-4 px-4 pb-10 pt-4 safe-bottom">
+        <main className="mx-auto max-w-2xl space-y-4 px-4 pb-10 pt-4">
           {/* Sign-in prompt (guest) */}
           {!isAuthenticated && !authLoading && (
             <motion.div

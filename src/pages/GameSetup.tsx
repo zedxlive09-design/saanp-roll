@@ -100,13 +100,13 @@ export default function GameSetup() {
       <button
         onClick={() => navigate("/home")}
         aria-label="Back"
-        className="fixed left-4 top-4 z-30 flex size-11 items-center justify-center rounded-2xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white safe-top"
+        className="fixed left-4 top-[calc(env(safe-area-inset-top)+1rem)] z-30 flex size-11 items-center justify-center rounded-2xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white"
       >
         <ArrowLeft className="size-5" />
       </button>
 
       {/* Main scrollable content */}
-      <div className="relative z-10 mx-auto max-w-md px-4 pb-32 pt-20 safe-top safe-bottom">
+      <div className="relative z-10 mx-auto max-w-md px-4 pb-32 pt-20">
         {/* Title */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}

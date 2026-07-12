@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Dialog } from "@radix-ui/react-dialog";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink, RefreshCw } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 type SyncError = {
@@ -103,6 +103,44 @@ function ErrorDialog({
   );
 }
 
+
+/**
+ * Game-styled full-screen fallback shown when the ErrorBoundary catches a
+ * fatal React render error. Uses Heritage tokens (no hardcoded colors) and
+ * offers a Reload button so the user is never stuck on a white screen.
+ */
+function CrashFallback() {
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center p-6"
+      style={{
+        background:
+          "radial-gradient(ellipse at 50% 35%, oklch(0.4 0.06 150) 0%, oklch(0.28 0.05 150) 70%, oklch(0.2 0.04 150) 100%)",
+      }}
+    >
+      <div className="w-full max-w-sm rounded-3xl border border-destructive/40 bg-gradient-to-br from-destructive/15 via-card to-card p-8 text-center shadow-paper-lg">
+        <div className="mb-3 text-5xl" role="img" aria-label="warning">
+          ⚠️
+        </div>
+        <h2 className="font-display text-2xl font-bold text-destructive">
+          Something went wrong
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          The game hit an unexpected error. Please reload to continue.
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-primary/60 bg-gradient-to-b from-primary to-primary/70 text-sm font-bold uppercase tracking-wider text-primary-foreground shadow-[0_5px_0_0_oklch(0.5_0.12_55)] transition-all hover:shadow-[0_4px_0_0_oklch(0.5_0.12_55)] active:translate-y-1 active:shadow-[0_3px_0_0_oklch(0.5_0.12_55)]"
+        >
+          <RefreshCw className="size-4" />
+          Reload Game
+        </button>
+      </div>
+    </div>
+  );
+}
+
 type ErrorBoundaryState = {
   hasError: boolean;
   error: GenericError | null;
@@ -151,16 +189,10 @@ class ErrorBoundary extends React.Component<
 
   render() {
     if (this.state.hasError) {
-      // You can render any custom fallback UI
-      return (
-        <ErrorDialog
-          error={{
-            error: "An error occurred",
-            stack: "",
-          }}
-          setError={() => {}}
-        />
-      );
+      // Game-styled full-screen fallback so the user is never stuck on a
+      // white screen. The ErrorDialog (for non-fatal window errors) is
+      // still rendered by InstrumentationProvider below.
+      return <CrashFallback />;
     }
 
     return this.props.children;

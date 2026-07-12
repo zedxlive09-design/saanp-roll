@@ -76,6 +76,10 @@ export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceR
   serverRoll,
 }, ref) {
   const [rolling, setRolling] = useState(false);
+  // Synchronous mirror of `rolling` so rapid taps (faster than one render
+  // frame) can't slip past the guard and trigger a double-roll — important
+  // for online mode where each roll is a server mutation.
+  const rollingRef = useRef(false);
   const [rotation, setRotation] = useState<string>("rotateX(0deg) rotateY(0deg)");
   const [pos, setPos] = useState({ x: 0, y: 0, scale: 1 });
   const [showGlow, setShowGlow] = useState(false);
@@ -90,8 +94,11 @@ export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceR
     // `force` is used by the imperative handle (bot auto-roll) so a bot can
     // trigger a roll even when the dice button is rendered disabled (because
     // it's the bot's turn, not a human's). The `rolling` guard still applies.
-    if (rolling) return;
+    // Use a synchronous ref so rapid taps can't slip past between the state
+    // check and setState committing.
+    if (rollingRef.current) return;
     if (!opts?.force && disabled) return;
+    rollingRef.current = true;
     setRolling(true);
     setShowGlow(false);
     haptics.roll();
@@ -155,6 +162,7 @@ export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceR
         setRotation(finalRot);
         haptics.tap();
         setTimeout(() => {
+          rollingRef.current = false;
           setRolling(false);
           setShowGlow(true);
           onRollRef.current(value);

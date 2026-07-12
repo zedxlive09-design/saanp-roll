@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, Navigate } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { Board } from "@/components/game/Board";
 import { DiceRoll } from "@/components/game/DiceRoll";
@@ -38,8 +38,9 @@ export default function OnlineGamePlay() {
   const { isAuthenticated } = useAuth();
 
   if (!roomCode) {
-    navigate("/lobby", { replace: true });
-    return null;
+    // Missing roomCode param — redirect via <Navigate> (render-time
+    // navigation is a React anti-pattern that can throw in StrictMode).
+    return <Navigate to="/lobby" replace />;
   }
 
   return <OnlineGamePlayInner roomCode={roomCode} />;
@@ -50,6 +51,9 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   const { game, rollDiceOnline, leaveGame, skipTurn } =
     useGameRoom(roomCode);
   const [isResolving, setIsResolving] = useState(false);
+  // Synchronous mirror of isResolving for dice-debounce (rapid taps can slip
+  // through React state since setState is async within a frame).
+  const isResolvingRef = useRef(false);
   const [lastRollValue, setLastRollValue] = useState<number | null>(null);
   const [showMoveLog, setShowMoveLog] = useState(false);
   const [highlightedTile, setHighlightedTile] = useState<number | null>(null);
@@ -155,8 +159,10 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
     doSkip();
   }, [timeLeft, game, skipTurn]);
 
-  // Loading state — full-bleed felt bg
-  if (!game) {
+  // Loading state — full-bleed felt bg. Distinguish undefined (still
+  // loading) from null (game not found / invalid room code) so an invalid
+  // code doesn't show "Loading..." forever.
+  if (game === undefined) {
     return (
       <div
         className="fixed inset-0 flex items-center justify-center"
@@ -179,9 +185,44 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
     );
   }
 
+  // Game not found — invalid room code or game was deleted. Show a
+  // game-styled error screen with a "Back to Lobby" button instead of
+  // looping on the loading screen forever.
+  if (game === null) {
+    return (
+      <div
+        className="fixed inset-0 flex items-center justify-center p-6"
+        style={{
+          background:
+            "radial-gradient(ellipse at 50% 35%, oklch(0.4 0.06 150) 0%, oklch(0.28 0.05 150) 70%, oklch(0.2 0.04 150) 100%)",
+        }}
+      >
+        <div className="w-full max-w-sm rounded-3xl border border-destructive/40 bg-gradient-to-br from-destructive/15 via-card to-card p-8 text-center shadow-paper-lg">
+          <div className="mb-3 text-5xl" role="img" aria-label="not found">
+            🚪
+          </div>
+          <h2 className="font-display text-2xl font-bold text-destructive">
+            Game not found
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            This room doesn&rsquo;t exist or has already ended.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("/lobby")}
+            className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-primary/60 bg-gradient-to-b from-primary to-primary/70 text-sm font-bold uppercase tracking-wider text-primary-foreground shadow-[0_5px_0_0_oklch(0.5_0.12_55)] transition-all hover:shadow-[0_4px_0_0_oklch(0.5_0.12_55)] active:translate-y-1 active:shadow-[0_3px_0_0_oklch(0.5_0.12_55)]"
+          >
+            Back to Lobby
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (game.status === "waiting") {
-    navigate(`/lobby`, { replace: true });
-    return null;
+    // Still in lobby — redirect via <Navigate> (render-time navigation is
+    // a React anti-pattern that can throw in StrictMode).
+    return <Navigate to="/lobby" replace />;
   }
 
   const boardMode = game.boardId as "classic" | "venom";
@@ -216,7 +257,10 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
 
   const handleRoll = useCallback(
     async (roll: number) => {
-      if (isResolving || isGameOver) return;
+      // Debounce: check both React state AND a synchronous ref so rapid taps
+      // can't slip through and double-roll.
+      if (isResolving || isResolvingRef.current || isGameOver) return;
+      isResolvingRef.current = true;
       setIsResolving(true);
       setLastRollValue(roll);
 
@@ -276,6 +320,7 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
 
             const finalizeTimeout = setTimeout(() => {
               setHighlightedTile(null);
+              isResolvingRef.current = false;
               setIsResolving(false);
               setAnimatedPositions({});
             }, 500);
@@ -285,6 +330,7 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
         animTimeoutRef.current = stepInterval;
       } else {
         const timeout = setTimeout(() => {
+          isResolvingRef.current = false;
           setIsResolving(false);
         }, 500);
         animTimeoutRef.current = timeout;

@@ -27,7 +27,6 @@ import {
   Swords,
   X,
 } from "lucide-react";
-import { LandscapePrompt } from "@/components/game/LandscapePrompt";
 
 /**
  * Online lobby — full-bleed felt-green table, big translucent room-code panel,
@@ -179,7 +178,6 @@ export default function OnlineLobby() {
 
   return (
     <>
-      <LandscapePrompt />
       <div
         className="min-h-screen overflow-y-auto"
         style={{
@@ -207,13 +205,13 @@ export default function OnlineLobby() {
           <button
             onClick={() => navigate("/home")}
             aria-label="Back"
-            className="absolute left-4 top-4 z-30 flex size-11 items-center justify-center rounded-2xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white safe-top"
+            className="absolute left-4 top-4 z-30 flex size-11 items-center justify-center rounded-2xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white"
           >
             <ArrowLeft className="size-5" />
           </button>
 
           {/* Page title */}
-          <div className="mx-auto max-w-2xl px-4 pt-6 pb-2 safe-top">
+          <div className="mx-auto max-w-2xl px-4 pt-6 pb-2">
             <motion.div
               initial={{ opacity: 0, y: -12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -231,7 +229,7 @@ export default function OnlineLobby() {
             </motion.div>
           </div>
 
-          <main className="mx-auto max-w-2xl space-y-4 px-4 pb-10 pt-4 safe-bottom">
+          <main className="mx-auto max-w-2xl space-y-4 px-4 pb-10 pt-4">
             <AnimatePresence mode="wait">
               {phase === "menu" && (
                 <motion.div
@@ -661,7 +659,7 @@ export default function OnlineLobby() {
                       Room Code
                     </p>
                     <div className="mt-3 flex items-center justify-center gap-3">
-                      <span className="font-mono text-4xl font-bold tracking-[0.25em] text-primary">
+                      <span className="font-mono text-3xl font-bold tracking-[0.25em] text-primary sm:text-4xl">
                         {createCode || joinCode}
                       </span>
                       <button

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate, Navigate } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,8 +32,10 @@ export default function GamePlay() {
   const state = location.state as LocationState | null;
 
   if (!state) {
-    navigate("/game/setup", { replace: true });
-    return null;
+    // Direct navigation to /game/play without going through setup — redirect
+    // to setup using <Navigate> (render-time navigation via navigate() is a
+    // React anti-pattern that can throw in StrictMode).
+    return <Navigate to="/game/setup" replace />;
   }
 
   return <GamePlayInner {...state} />;
@@ -137,7 +139,10 @@ function GamePlayInner({
 
   const handleRoll = useCallback(
     (roll: number) => {
-      if (isResolving || isGameOver) return;
+      // Debounce: check both React state AND a synchronous ref so rapid taps
+      // (faster than one render frame) can't slip through and double-roll.
+      if (isResolving || isResolvingRef.current || isGameOver) return;
+      isResolvingRef.current = true;
       haptics.roll();
       setIsResolving(true);
       setLastRollValue(roll);
@@ -227,6 +232,7 @@ function GamePlayInner({
                 } else {
                   setGameState(advanceTurn(afterRoll));
                 }
+                isResolvingRef.current = false;
                 setIsResolving(false);
                 setAnimatedPositions({});
               }, finalPos !== landingTile ? 500 : 0);
@@ -246,6 +252,7 @@ function GamePlayInner({
           } else {
             setGameState(advanceTurn(afterRoll));
           }
+          isResolvingRef.current = false;
           setIsResolving(false);
         }, 500);
         animTimeoutRef.current = resolveTimeout;
@@ -257,6 +264,7 @@ function GamePlayInner({
   const handleRematch = () => {
     setGameState(createInitialGameState(boardMode, playerSetup));
     setLastRollValue(null);
+    isResolvingRef.current = false;
     setIsResolving(false);
     setHighlightedTile(null);
     setAnimatingPlayer(null);

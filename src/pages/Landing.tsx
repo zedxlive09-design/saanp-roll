@@ -42,7 +42,7 @@ export default function Landing() {
       <button
         onClick={() => navigate("/settings")}
         aria-label="Settings"
-        className="absolute right-4 top-4 z-30 flex size-11 items-center justify-center rounded-2xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white safe-top"
+        className="absolute right-4 top-[calc(env(safe-area-inset-top)+1rem)] z-30 flex size-11 items-center justify-center rounded-2xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/50 hover:text-white"
       >
         <Settings className="size-5" />
       </button>
@@ -127,7 +127,7 @@ export default function Landing() {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 1 }}
           onClick={() => navigate("/game/setup")}
-          className="absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-1.5 text-xs font-medium text-white/55 transition-colors hover:text-white/85"
+          className="absolute bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] left-1/2 flex -translate-x-1/2 items-center gap-1.5 text-xs font-medium text-white/55 transition-colors hover:text-white/85"
         >
           <HelpCircle className="size-3.5" />
           How to Play

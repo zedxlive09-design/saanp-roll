@@ -18,8 +18,9 @@ import { internal } from "./_generated/api";
  */
 const crons = cronJobs();
 
-// DISABLED: No auto-bot-fill in Friends mode (waiting games are all Friends rooms).
-// crons.interval("fill-bots", { seconds: 10 }, internal.bots.checkAndFillBots);
+// Quick Match bot fallback: after 30s of searching, fill with a bot opponent.
+// Only affects matchmaking queue entries, NOT Friends rooms.
+crons.interval("fill-qm-bots", { seconds: 10 }, internal.matchmaking.fillQuickMatchBots);
 crons.interval(
   "advance-bots",
   { seconds: 1 },

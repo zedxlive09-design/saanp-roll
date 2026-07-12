@@ -695,11 +695,11 @@ export default function OnlineLobby() {
                               />
                             ))}
                           </div>
-                          {qmElapsed > 15 && (
-                            <p className="text-[11px] text-white/40">
-                              Taking a while? Bots will fill in if no opponent is found.
-                            </p>
-                          )}
+                          <p className="text-[11px] text-white/40">
+                            {qmElapsed < 30
+                              ? `A bot opponent will join in ${30 - qmElapsed}s if no player is found`
+                              : "Matching with a bot opponent..."}
+                          </p>
                           <Button
                             variant="outline"
                             className="h-11 w-full border-destructive/40 bg-destructive/10 font-semibold text-destructive hover:bg-destructive/20"

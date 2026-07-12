@@ -1,16 +1,25 @@
-import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { useState, useRef } from "react";
 import { soundManager } from "@/lib/sounds";
+import { haptics } from "@/lib/haptics";
 
-// [row, col] positions on a 3x3 grid (rows 1-3 top to bottom, cols 2/4/6 left to right)
-const DOT_POSITIONS: Record<number, [number, number][]> = {
-  1: [[2, 4]],
-  2: [[1, 6], [3, 2]],
-  3: [[1, 6], [2, 4], [3, 2]],
-  4: [[1, 2], [1, 6], [3, 2], [3, 6]],
-  5: [[1, 2], [1, 6], [2, 4], [3, 2], [3, 6]],
-  6: [[1, 2], [1, 6], [2, 2], [2, 6], [3, 2], [3, 6]],
+// Pip positions on a 3x3 grid for each face value
+const PIPS: Record<number, [number, number][]> = {
+  1: [[1, 1]],
+  2: [[0, 0], [2, 2]],
+  3: [[0, 0], [1, 1], [2, 2]],
+  4: [[0, 0], [0, 2], [2, 0], [2, 2]],
+  5: [[0, 0], [0, 2], [1, 1], [2, 0], [2, 2]],
+  6: [[0, 0], [0, 2], [1, 0], [1, 2], [2, 0], [2, 2]],
+};
+
+// Rotation to show each face on the front
+const FACE_ROTATION: Record<number, string> = {
+  1: "rotateX(0deg) rotateY(0deg)",
+  2: "rotateY(-90deg)",
+  3: "rotateX(90deg)",
+  4: "rotateX(-90deg)",
+  5: "rotateY(90deg)",
+  6: "rotateY(180deg)",
 };
 
 interface DiceRollProps {
@@ -18,154 +27,135 @@ interface DiceRollProps {
   disabled?: boolean;
   currentPlayerColor?: string;
   isExtraRoll?: boolean;
-  /**
-   * If provided, the final roll value comes from this async function
-   * (e.g., a server mutation) instead of being generated locally.
-   * The animation still shows random flips, but the final shown value
-   * is the resolved value from this function.
-   */
   serverRoll?: () => Promise<number>;
+}
+
+function Face({ value }: { value: number }) {
+  const pips = PIPS[value];
+  return (
+    <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 rounded-xl border-2 border-amber-900/20 bg-gradient-to-br from-amber-50 to-amber-100 p-2 shadow-inner">
+      {Array.from({ length: 9 }).map((_, i) => {
+        const row = Math.floor(i / 3);
+        const col = i % 3;
+        const hasPip = pips.some(([r, c]) => r === row && c === col);
+        return (
+          <div key={i} className="flex items-center justify-center">
+            {hasPip && (
+              <div
+                className="size-2.5 rounded-full bg-gradient-to-br from-stone-700 to-stone-900"
+                style={{ boxShadow: "inset 0 1px 1px oklch(0 0 0 / 0.4)" }}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function DiceRoll({
   onRoll,
   disabled = false,
-  currentPlayerColor = "#6366f1",
+  currentPlayerColor = "#d97706",
   isExtraRoll = false,
   serverRoll,
 }: DiceRollProps) {
   const [rolling, setRolling] = useState(false);
-  const [lastValue, setLastValue] = useState<number | null>(null);
-  const [facesKey, setFacesKey] = useState(0);
+  const [finalValue, setFinalValue] = useState<number | null>(null);
+  const [rotation, setRotation] = useState<string>("rotateX(0deg) rotateY(0deg)");
+  const [tumble, setTumble] = useState(false);
+  const cubeRef = useRef<HTMLDivElement>(null);
 
   const handleRoll = async () => {
     if (disabled || rolling) return;
     setRolling(true);
-    setFacesKey((k) => k + 1);
-
-    // Play dice rattle
+    haptics.roll();
     soundManager.play("dice_roll");
 
-    // Animated tumble — rapid random flips with 3D rotation timing
-    const flipCount = 4 + Math.floor(Math.random() * 4);
+    // Tumble animation: rapid random rotations
+    setTumble(true);
+    const flipCount = 5 + Math.floor(Math.random() * 3);
     for (let i = 0; i < flipCount; i++) {
-      await new Promise((r) => setTimeout(r, 60 + i * 30));
-      setLastValue(Math.floor(Math.random() * 6) + 1);
+      const rx = Math.floor(Math.random() * 4) * 90 + 360 * (i + 1);
+      const ry = Math.floor(Math.random() * 4) * 90 + 360 * (i + 1);
+      setRotation(`rotateX(${rx}deg) rotateY(${ry}deg)`);
+      await new Promise((r) => setTimeout(r, 110));
     }
 
-    // Final roll — either from server or local
-    const finalValue = serverRoll
-      ? await serverRoll()
-      : Math.floor(Math.random() * 6) + 1;
-    setLastValue(finalValue);
-    await new Promise((r) => setTimeout(r, 200));
+    // Final value
+    const value = serverRoll ? await serverRoll() : Math.floor(Math.random() * 6) + 1;
+    setFinalValue(value);
+    // Settle on the correct face with a springy transition
+    setRotation(FACE_ROTATION[value]);
+    setTumble(false);
+    await new Promise((r) => setTimeout(r, 250));
     setRolling(false);
-    onRoll(finalValue);
+    haptics.tap();
+    onRoll(value);
   };
 
-  const pips = lastValue ? DOT_POSITIONS[lastValue] : DOT_POSITIONS[1];
-
   return (
-    <div className="flex flex-col items-center gap-3">
-      <motion.button
+    <div className="pointer-events-auto flex flex-col items-center gap-2">
+      <button
         onClick={handleRoll}
         disabled={disabled || rolling}
-        className={cn(
-          "relative w-24 h-24 rounded-2xl shadow-lg cursor-pointer select-none",
-          "border-2 transition-colors duration-200",
-          disabled
-            ? "opacity-50 cursor-not-allowed"
-            : "hover:shadow-xl active:shadow-md",
-        )}
+        className="relative cursor-pointer select-none"
         style={{
-          backgroundColor: "#fdfbf3",
-          borderColor: currentPlayerColor,
+          width: 64,
+          height: 64,
+          perspective: 400,
+          opacity: disabled ? 0.5 : 1,
         }}
-        // 3D tumble animation during roll
-        animate={
-          rolling
-            ? {
-                rotateX: [0, 360, 720, 1080],
-                rotateY: [0, 180, 540, 720],
-                scale: [1, 1.08, 1.05, 1],
-                boxShadow: [
-                  `0 4px 6px -1px rgb(0 0 0 / 0.1)`,
-                  `0 0 24px ${currentPlayerColor}60`,
-                  `0 0 16px ${currentPlayerColor}40`,
-                  `0 4px 6px -1px rgb(0 0 0 / 0.1)`,
-                ],
-              }
-            : {
-                rotateX: 0,
-                rotateY: 0,
-                scale: 1,
-              }
-        }
-        transition={
-          rolling
-            ? {
-                duration: 0.8,
-                ease: "easeInOut",
-                times: [0, 0.3, 0.6, 1],
-              }
-            : { duration: 0.3 }
-        }
-        whileTap={rolling ? {} : { scale: 0.92 }}
+        aria-label="Roll dice"
       >
-        {/* Dice dots */}
+        {/* Contact shadow under dice (stays flat, doesn't rotate) */}
         <div
-          className="absolute inset-2 grid grid-cols-3 grid-rows-3 gap-1"
-          style={{ perspective: 200 }}
-        >
-          {Array.from({ length: 9 }).map((_, i) => {
-            const row = Math.floor(i / 3) + 1;
-            const col = (i % 3) * 2 + 2;
-            const hasDot = pips.some(([r, c]) => r === row && c === col);
-            return (
-              <div key={i} className="flex items-center justify-center">
-                {hasDot && (
-                  <motion.div
-                    key={`${facesKey}-${i}`}
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 12 }}
-                    className="w-3 h-3 rounded-full"
-                    style={{
-                      backgroundColor: rolling ? "#a1a1aa" : "#1c1917",
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Shine / glow during roll */}
-        {rolling && (
-          <motion.div
-            className="absolute inset-0 rounded-xl"
-            style={{
-              background:
-                "linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.4) 50%, transparent 60%)",
-            }}
-            animate={{ x: ["-100%", "100%"] }}
-            transition={{ duration: 0.4, repeat: Infinity, ease: "linear" }}
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/40 transition-all"
+          style={{
+            width: 50,
+            height: 14,
+            filter: "blur(4px)",
+            transform: rolling
+              ? "translate(-50%, -50%) scale(1.3) "
+              : "translate(-50%, -50%) scale(1)",
+          }}
+        />
+        {/* Glow ring when it's your turn */}
+        {!rolling && !disabled && (
+          <div
+            className="absolute -inset-2 rounded-full animate-pulse"
+            style={{ boxShadow: `0 0 20px 4px ${currentPlayerColor}80` }}
           />
         )}
-      </motion.button>
+        {/* The 3D cube */}
+        <div
+          ref={cubeRef}
+          className="absolute left-1/2 top-1/2"
+          style={{
+            width: 48,
+            height: 48,
+            transformStyle: "preserve-3d",
+            transform: `translate(-50%, -50%) ${rotation}`,
+            transition: tumble
+              ? "transform 0.1s linear"
+              : "transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+          }}
+        >
+          {/* 6 faces */}
+          <div className="absolute" style={{ width: 48, height: 48, transform: "translateZ(24px)" }}><Face value={1} /></div>
+          <div className="absolute" style={{ width: 48, height: 48, transform: "rotateY(90deg) translateZ(24px)" }}><Face value={2} /></div>
+          <div className="absolute" style={{ width: 48, height: 48, transform: "rotateX(90deg) translateZ(24px)" }}><Face value={3} /></div>
+          <div className="absolute" style={{ width: 48, height: 48, transform: "rotateX(-90deg) translateZ(24px)" }}><Face value={4} /></div>
+          <div className="absolute" style={{ width: 48, height: 48, transform: "rotateY(-90deg) translateZ(24px)" }}><Face value={5} /></div>
+          <div className="absolute" style={{ width: 48, height: 48, transform: "rotateY(180deg) translateZ(24px)" }}><Face value={6} /></div>
+        </div>
+      </button>
 
-      <AnimatePresence mode="wait">
-        {isExtraRoll && (
-          <motion.span
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="text-xs font-medium text-primary"
-          >
-            🎲 Extra roll!
-          </motion.span>
-        )}
-      </AnimatePresence>
+      {isExtraRoll && (
+        <span className="rounded-full bg-primary/30 px-2 py-0.5 text-[10px] font-bold text-primary-foreground">
+          🎲 EXTRA ROLL
+        </span>
+      )}
     </div>
   );
 }

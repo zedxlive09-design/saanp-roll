@@ -120,9 +120,9 @@ function GamePlayInner({
         const snakeTail = getSnakeTail(boardMode, rawNewPos);
         const ladderTop = getLadderTop(boardMode, rawNewPos);
         if (snakeTail) {
-          setTimeout(() => soundManager.play("snake_bite"), tilesToStep * TILE_STEP_DELAY + 200);
+          setTimeout(() => { soundManager.play("snake_slither"); soundManager.play("snake_bite"); }, tilesToStep * TILE_STEP_DELAY + 200);
         } else if (ladderTop) {
-          setTimeout(() => soundManager.play("ladder_climb"), tilesToStep * TILE_STEP_DELAY + 200);
+          setTimeout(() => soundManager.play("ladder_run"), tilesToStep * TILE_STEP_DELAY + 200);
         }
       }
 
@@ -153,7 +153,7 @@ function GamePlayInner({
             [player.id]: steppedPos,
           }));
           // Play a soft tick for each tile stepped
-          soundManager.play("tile_step");
+          soundManager.play("footstep");
           step++;
 
           if (steppedPos >= landingTile) {
@@ -239,8 +239,9 @@ function GamePlayInner({
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [gameState.moveLog.length]);
 
-  // 3D tilt angle — less extreme on mobile for readability, none on low-spec
-  const tilt = isHighSpec ? (isMobile ? 38 : 52) : 0;
+  // Board stays FLAT for razor-sharp clarity (CSS 3D tilt blurs SVG).
+  // Depth comes from the SVG drop-shadows + felt table background.
+  const tilt = 0;
 
   return (
     <>
@@ -323,43 +324,46 @@ function GamePlayInner({
           </button>
         </div>
 
-        {/* === Center: 3D tilted board === */}
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{
-            perspective: isHighSpec ? "1200px" : "none",
-            // Shift board up slightly so it's centered visually with HUD
-            paddingTop: "3rem",
-          }}
-        >
+        {/* === Center: the board (flat, crisp, fits entirely on screen) === */}
+        <div className="absolute inset-0 flex items-center justify-center px-2" style={{ paddingTop: "3.5rem", paddingBottom: "4rem" }}>
           <div
+            className="relative aspect-square"
             style={{
-              transform: tilt ? `rotateX(${tilt}deg)` : "none",
-              transformStyle: "preserve-3d",
-              transition: "transform 0.4s ease-out",
-              filter: isHighSpec
-                ? "drop-shadow(0 30px 40px oklch(0 0 0 / 0.5))"
-                : "drop-shadow(0 10px 15px oklch(0 0 0 / 0.4))",
+              height: "min(calc(100vh - 8rem), 94vw)",
+              maxHeight: "calc(100vh - 8rem)",
+              maxWidth: "94vw",
+              filter: "drop-shadow(0 16px 28px oklch(0 0 0 / 0.55))",
             }}
           >
             <Board
               boardId={boardMode}
               players={displayPlayers}
               highlightedTile={highlightedTile}
-              className="w-[min(88vw,440px)] sm:w-[min(70vh,520px)]"
+              className="h-full w-full"
             />
+
+            {/* Dice overlay — tumbles ON the board surface */}
+            {!isGameOver && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <DiceRoll
+                  onRoll={handleRoll}
+                  disabled={isResolving || isGameOver}
+                  currentPlayerColor={currentPlayer?.color}
+                  isExtraRoll={isExtraRoll}
+                />
+              </div>
+            )}
           </div>
         </div>
 
-        {/* === Bottom HUD: turn info + dice + roll button === */}
+        {/* === Bottom HUD: turn indicator only (dice is on the board) === */}
         {!isGameOver && (
-          <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-3 p-4 safe-bottom">
-            {/* Turn indicator */}
+          <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-2 p-4 safe-bottom">
             <motion.div
               key={currentPlayer?.id + gameState.turnPhase}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2.5 rounded-full border border-white/15 bg-black/40 px-4 py-1.5 backdrop-blur-md"
+              className="flex items-center gap-2.5 rounded-full border border-white/20 bg-black/50 px-4 py-1.5 backdrop-blur-md"
             >
               <span
                 className="size-3 rounded-full"
@@ -379,21 +383,9 @@ function GamePlayInner({
                 </span>
               )}
             </motion.div>
-
-            {/* Dice + roll area */}
-            <div className="flex flex-col items-center">
-              <DiceRoll
-                onRoll={handleRoll}
-                disabled={isResolving || isGameOver}
-                currentPlayerColor={currentPlayer?.color}
-                isExtraRoll={isExtraRoll}
-              />
-              {!isResolving && (
-                <p className="mt-2 text-[11px] text-white/60">
-                  Tap the dice to roll
-                </p>
-              )}
-            </div>
+            {!isResolving && (
+              <p className="text-[11px] text-white/60">Tap the dice to roll</p>
+            )}
           </div>
         )}
 

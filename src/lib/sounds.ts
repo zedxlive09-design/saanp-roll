@@ -155,7 +155,7 @@ function writeString(view: DataView, offset: number, string: string) {
 // Sound effect synthesizer
 // ---------------------------------------------------------------------------
 
-export type SoundEffect = "dice_roll" | "tile_step" | "snake_bite" | "ladder_climb" | "win_fanfare" | "overshoot" | "reconnect_chime";
+export type SoundEffect = "dice_roll" | "tile_step" | "footstep" | "ladder_run" | "snake_slither" | "snake_bite" | "ladder_climb" | "win_fanfare" | "overshoot" | "reconnect_chime";
 
 class SoundManager {
   private cache = new Map<SoundEffect, Howl>();
@@ -229,6 +229,33 @@ class SoundManager {
         duration: 0.35,
         volume: 0.15,
         type: "sine",
+      }),
+
+      // Soft footstep — a muted thud with a tiny noise tick. Played per tile move.
+      this.register("footstep", {
+        freq: [180, 90],
+        duration: 0.06,
+        volume: 0.08,
+        type: "sine",
+        noisy: true,
+      }),
+
+      // Rapid running footsteps for ladder climb — quick double-tap feel.
+      this.register("ladder_run", {
+        freq: [220, 120],
+        duration: 0.18,
+        volume: 0.12,
+        type: "triangle",
+        noisy: true,
+      }),
+
+      // Snake slither — a descending filtered sweep with noise texture.
+      this.register("snake_slither", {
+        freq: [600, 200],
+        duration: 0.4,
+        volume: 0.14,
+        type: "sawtooth",
+        noisy: true,
       }),
     ]).then(() => {});
   }

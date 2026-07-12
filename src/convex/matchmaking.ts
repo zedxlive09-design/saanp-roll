@@ -76,9 +76,10 @@ function toPublic(entry: {
  * UI can offer a fresh search instead of navigating to a dead game.
  */
 export const getMyQueueEntry = query({
-  args: {},
-  handler: async (ctx): Promise<QueueEntryPublic | null> => {
-    const userId = await getAuthUserId(ctx);
+  args: { anonId: v.optional(v.string()) },
+  handler: async (ctx, { anonId }): Promise<QueueEntryPublic | null> => {
+    const authId = await getAuthUserId(ctx);
+    const userId = authId ?? (anonId ? `anon-${anonId}` : null);
     if (!userId) return null;
 
     // Active search entry — always relevant.
@@ -122,14 +123,29 @@ export const getMyQueueEntry = query({
  * Requires authentication — anonymous users cannot use Quick Match.
  */
 export const joinQueue = mutation({
-  args: { boardId: v.string() },
-  handler: async (ctx, { boardId }): Promise<QueueEntryPublic> => {
-    const userId = await getAuthUserId(ctx);
+  args: {
+    boardId: v.string(),
+    anonId: v.optional(v.string()),
+    playerName: v.optional(v.string()),
+  },
+  handler: async (ctx, { boardId, anonId, playerName }): Promise<QueueEntryPublic> => {
+    // Allow both authenticated AND anonymous users.
+    // Authenticated users use their real userId; anon users pass a stable
+    // client-generated ID (stored in localStorage) so they can reconnect.
+    const authId = await getAuthUserId(ctx);
+    const userId = authId ?? (anonId ? `anon-${anonId}` : null);
     if (!userId) {
-      throw new Error("Sign in to play Quick Match");
+      throw new Error("Unable to identify user. Please refresh the page.");
     }
 
-    const name = await getUserName(ctx, userId);
+    // Get name: authenticated user's stored name, or the passed playerName, or "Guest"
+    let name = "Guest";
+    if (authId) {
+      const storedName = await getUserName(ctx, authId);
+      if (storedName) name = storedName;
+    } else if (playerName) {
+      name = playerName;
+    }
 
     // Already actively searching? Return the existing entry.
     const existingSearch = await ctx.db
@@ -277,9 +293,10 @@ export const joinQueue = mutation({
  * managed via the games table (leaveGame / disconnect logic).
  */
 export const leaveQueue = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+  args: { anonId: v.optional(v.string()) },
+  handler: async (ctx, { anonId }) => {
+    const authId = await getAuthUserId(ctx);
+    const userId = authId ?? (anonId ? `anon-${anonId}` : null);
     if (!userId) return;
 
     const entry = await ctx.db
@@ -299,9 +316,10 @@ export const leaveQueue = mutation({
  * Keeps the matchmaking table tidy once the entry has served its purpose.
  */
 export const clearMatchedEntry = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+  args: { anonId: v.optional(v.string()) },
+  handler: async (ctx, { anonId }) => {
+    const authId = await getAuthUserId(ctx);
+    const userId = authId ?? (anonId ? `anon-${anonId}` : null);
     if (!userId) return;
 
     const entry = await ctx.db

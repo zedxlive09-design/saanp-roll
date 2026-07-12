@@ -641,21 +641,7 @@ export default function OnlineLobby() {
                         Quick Match
                       </h2>
 
-                      {!isAuthenticated && !isAuthLoading ? (
-                        <div className="space-y-3 text-center">
-                          <p className="text-sm text-white/55">
-                            Sign in to play Quick Match against other players
-                            online.
-                          </p>
-                          <Button
-                            className="h-12 w-full font-semibold shadow-[0_6px_0_0_oklch(0.5_0.12_55)] hover:shadow-[0_4px_0_0_oklch(0.5_0.12_55)] active:translate-y-0.5"
-                            onClick={() => navigate("/auth")}
-                          >
-                            <LogIn className="mr-2 h-4 w-4" />
-                            Sign In to Play
-                          </Button>
-                        </div>
-                      ) : (qmSearching || myQueueEntry?.status === "searching") ? (
+                      {(qmSearching || myQueueEntry?.status === "searching") ? (
                         <div className="space-y-5 py-4 text-center">
                           {/* Big 8BP-style searching spinner */}
                           <div className="relative mx-auto flex h-28 w-28 items-center justify-center">

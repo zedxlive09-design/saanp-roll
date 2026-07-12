@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "convex/react";
+import { useState, useEffect } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "./use-auth";
@@ -40,11 +41,30 @@ export function useGameRoom(roomCode: string | null) {
  * - `clearMatchedEntry()`: tidy up a "matched" entry after navigating to the
  *   game (optional; stale entries are filtered out by getMyQueueEntry).
  */
+/**
+ * Quick Match matchmaking hook with anonymous user support.
+ *
+ * Generates a stable anonymous ID (stored in localStorage) so guest users
+ * can use Quick Match without signing in. Authenticated users use their
+ * real Convex auth ID; the anon ID is ignored when authenticated.
+ */
 export function useMatchmaking() {
-  const myQueueEntry = useQuery(api.matchmaking.getMyQueueEntry);
-  const joinQueue = useMutation(api.matchmaking.joinQueue);
-  const leaveQueue = useMutation(api.matchmaking.leaveQueue);
-  const clearMatchedEntry = useMutation(api.matchmaking.clearMatchedEntry);
+  // Stable anon ID — generated once per browser, persisted in localStorage
+  const anonId = useAnonId();
+
+  const myQueueEntry = useQuery(
+    api.matchmaking.getMyQueueEntry,
+    anonId ? { anonId } : "skip",
+  );
+  const joinQueueMutation = useMutation(api.matchmaking.joinQueue);
+  const leaveQueueMutation = useMutation(api.matchmaking.leaveQueue);
+  const clearMatchedEntryMutation = useMutation(api.matchmaking.clearMatchedEntry);
+
+  // Wrappers that pass the anonId so the server can identify guest users
+  const joinQueue = (args: { boardId: string; playerName?: string }) =>
+    joinQueueMutation({ boardId: args.boardId, anonId: anonId ?? undefined, playerName: args.playerName });
+  const leaveQueue = () => leaveQueueMutation({ anonId: anonId ?? undefined });
+  const clearMatchedEntry = () => clearMatchedEntryMutation({ anonId: anonId ?? undefined });
 
   return {
     myQueueEntry,
@@ -52,6 +72,32 @@ export function useMatchmaking() {
     leaveQueue,
     clearMatchedEntry,
   };
+}
+
+/**
+ * Returns a stable anonymous ID from localStorage. Generates one on first call.
+ * Used so guest users can use Quick Match without signing in.
+ */
+function useAnonId(): string | null {
+  const [id, setId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("saanp-anon-id");
+      if (stored) {
+        setId(stored);
+      } else {
+        const newId = crypto.randomUUID();
+        localStorage.setItem("saanp-anon-id", newId);
+        setId(newId);
+      }
+    } catch {
+      // localStorage not available (SSR / private mode) — return null
+      setId(null);
+    }
+  }, []);
+
+  return id;
 }
 
 export type { Id };

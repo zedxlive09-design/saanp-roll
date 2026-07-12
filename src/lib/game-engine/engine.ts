@@ -173,7 +173,7 @@ export function getTileColor(
  */
 export function createInitialGameState(
   boardId: BoardMode,
-  players: Array<{ id: string; name: string; color: string }>,
+  players: Array<{ id: string; name: string; color: string; isBot?: boolean }>,
 ): GameState {
   return {
     boardId,
@@ -181,6 +181,7 @@ export function createInitialGameState(
       id: p.id,
       name: p.name,
       color: p.color,
+      isBot: p.isBot ?? false,
       position: 0,
       consecutiveSixes: 0,
     })),

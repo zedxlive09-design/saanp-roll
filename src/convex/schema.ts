@@ -58,6 +58,20 @@ const schema = defineSchema(
     })
       .index("by_roomCode", ["roomCode"])
       .index("by_status", ["status"]),
+
+    // Quick Match matchmaking queue
+    matchmaking: defineTable({
+      userId: v.string(),
+      name: v.string(),
+      boardId: v.string(), // "classic" | "venom"
+      status: v.string(), // "searching" | "matched" | "expired"
+      gameId: v.optional(v.id("games")), // set when matched
+      roomCode: v.optional(v.string()), // set when matched (for client nav)
+      opponentName: v.optional(v.string()), // set when matched
+      createdAt: v.number(),
+    })
+      .index("by_status", ["status"])
+      .index("by_userId", ["userId"]),
   },
   {
     schemaValidation: false,

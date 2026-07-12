@@ -1,4 +1,10 @@
-import { useState, useRef } from "react";
+import {
+  useState,
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+  useCallback,
+} from "react";
 import { soundManager } from "@/lib/sounds";
 import { haptics } from "@/lib/haptics";
 
@@ -30,6 +36,15 @@ interface DiceRollProps {
   serverRoll?: () => Promise<number>;
 }
 
+/**
+ * Imperative handle exposed by <DiceRoll ref={...} />.
+ * Lets a parent (e.g. the bot auto-roll effect) trigger the same tumble
+ * animation + sound + onRoll callback as a human tap.
+ */
+export interface DiceRollHandle {
+  roll: () => void;
+}
+
 function Face({ value }: { value: number }) {
   const pips = PIPS[value];
   return (
@@ -53,21 +68,30 @@ function Face({ value }: { value: number }) {
   );
 }
 
-export function DiceRoll({
+export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceRoll({
   onRoll,
   disabled = false,
   currentPlayerColor = "#d97706",
   isExtraRoll = false,
   serverRoll,
-}: DiceRollProps) {
+}, ref) {
   const [rolling, setRolling] = useState(false);
   const [rotation, setRotation] = useState<string>("rotateX(0deg) rotateY(0deg)");
   const [pos, setPos] = useState({ x: 0, y: 0, scale: 1 });
   const [showGlow, setShowGlow] = useState(false);
   const animRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
 
-  const handleRoll = async () => {
-    if (disabled || rolling) return;
+  // Keep a ref to the latest onRoll so the imperative handle is stable
+  // but always invokes the freshest callback closure.
+  const onRollRef = useRef(onRoll);
+  onRollRef.current = onRoll;
+
+  const handleRoll = useCallback(async (opts?: { force?: boolean }) => {
+    // `force` is used by the imperative handle (bot auto-roll) so a bot can
+    // trigger a roll even when the dice button is rendered disabled (because
+    // it's the bot's turn, not a human's). The `rolling` guard still applies.
+    if (rolling) return;
+    if (!opts?.force && disabled) return;
     setRolling(true);
     setShowGlow(false);
     haptics.roll();
@@ -133,17 +157,29 @@ export function DiceRoll({
         setTimeout(() => {
           setRolling(false);
           setShowGlow(true);
-          onRoll(value);
+          onRollRef.current(value);
         }, 200);
       }
     }
     animRef.current = requestAnimationFrame(animate);
-  };
+  }, [disabled, rolling, serverRoll]);
+
+  // Expose a stable imperative roll() so bots can trigger the same tumble
+  // animation + sound + onRoll flow as a human tap.
+  useImperativeHandle(
+    ref,
+    () => ({
+      roll: () => {
+        void handleRoll({ force: true });
+      },
+    }),
+    [handleRoll],
+  );
 
   return (
     <div className="pointer-events-auto flex flex-col items-center gap-2">
       <button
-        onClick={handleRoll}
+        onClick={() => handleRoll()}
         disabled={disabled || rolling}
         className="relative cursor-pointer select-none"
         style={{
@@ -200,4 +236,4 @@ export function DiceRoll({
       )}
     </div>
   );
-}
+});

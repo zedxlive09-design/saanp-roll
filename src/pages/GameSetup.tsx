@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "framer-motion";
-import { ArrowLeft, Minus, Plus, Play, Users, Skull } from "lucide-react";
-import type { BoardMode } from "@/lib/game-engine";
+import { ArrowLeft, Minus, Plus, Play, Users, Skull, Cpu, User } from "lucide-react";
+import type { BoardMode, PlayerSetup } from "@/lib/game-engine";
 import { BOARD_CONFIGS } from "@/lib/game-engine";
 
 /**
@@ -20,18 +20,21 @@ const PLAYER_COLORS = [
 ];
 
 const DEFAULT_NAMES = ["Player 1", "Player 2", "Player 3", "Player 4"];
+const DEFAULT_BOT_NAMES = ["Bot 1", "Bot 2", "Bot 3", "Bot 4"];
 
 export default function GameSetup() {
   const navigate = useNavigate();
   const [playerCount, setPlayerCount] = useState(2);
   const [boardMode, setBoardMode] = useState<BoardMode>("classic");
   const [names, setNames] = useState<string[]>([...DEFAULT_NAMES]);
+  const [botFlags, setBotFlags] = useState<boolean[]>([false, false, false, false]);
 
   const handleStartGame = () => {
-    const players = Array.from({ length: playerCount }, (_, i) => ({
+    const players: PlayerSetup[] = Array.from({ length: playerCount }, (_, i) => ({
       id: `player-${i}`,
-      name: names[i] || `Player ${i + 1}`,
+      name: names[i] || (botFlags[i] ? DEFAULT_BOT_NAMES[i] : `Player ${i + 1}`),
       color: PLAYER_COLORS[i].value,
+      isBot: botFlags[i],
     }));
 
     navigate("/game/play", {
@@ -41,6 +44,34 @@ export default function GameSetup() {
       },
     });
   };
+
+  // Toggle a player between Human and Bot. When switching to Bot, prefill the
+  // name with "Bot N" (only if the name is still the default human name or
+  // empty). When switching back to Human, restore the default human name.
+  const toggleBot = (index: number) => {
+    const newFlags = [...botFlags];
+    const newNames = [...names];
+    const willBeBot = !botFlags[index];
+    newFlags[index] = willBeBot;
+
+    const currentName = newNames[index];
+    const isDefaultHuman = currentName === `Player ${index + 1}` || currentName === "";
+    const isDefaultBot = currentName === DEFAULT_BOT_NAMES[index];
+    if (willBeBot && (isDefaultHuman || isDefaultBot)) {
+      newNames[index] = DEFAULT_BOT_NAMES[index];
+    } else if (!willBeBot && isDefaultBot) {
+      newNames[index] = `Player ${index + 1}`;
+    }
+
+    setBotFlags(newFlags);
+    setNames(newNames);
+  };
+
+  // At least one player must be human.
+  const humanCount = Array.from({ length: playerCount }, (_, i) => i).filter(
+    (i) => !botFlags[i],
+  ).length;
+  const canStart = humanCount >= 1;
 
   return (
     <div
@@ -167,30 +198,78 @@ export default function GameSetup() {
           transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
           className="mt-4 rounded-2xl border border-white/15 bg-black/30 p-5 backdrop-blur-md"
         >
-          <p className="mb-3 font-display text-sm font-semibold text-white/90">
-            Player Names
-          </p>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="font-display text-sm font-semibold text-white/90">
+              Player Names
+            </p>
+            <span className="text-[10px] uppercase tracking-wider text-white/40">
+              Human / Bot
+            </span>
+          </div>
           <div className="space-y-2.5">
-            {Array.from({ length: playerCount }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white shadow-[0_3px_8px_oklch(0_0_0/0.4)]"
-                  style={{ backgroundColor: PLAYER_COLORS[i].value }}
-                >
-                  {i + 1}
+            {Array.from({ length: playerCount }).map((_, i) => {
+              const isBot = botFlags[i];
+              // Disable turning this (currently human) slot into a bot if
+              // doing so would leave zero human players among the active slots.
+              const wouldLeaveNoHumans = !isBot
+                ? Array.from({ length: playerCount }, (_, j) => j).filter(
+                    (j) => j !== i && !botFlags[j],
+                  ).length === 0
+                : false;
+              return (
+                <div key={i} className="flex items-center gap-2.5">
+                  <div
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white shadow-[0_3px_8px_oklch(0_0_0/0.4)]"
+                    style={{ backgroundColor: PLAYER_COLORS[i].value }}
+                  >
+                    {i + 1}
+                  </div>
+                  <input
+                    value={names[i]}
+                    onChange={(e) => {
+                      const newNames = [...names];
+                      newNames[i] = e.target.value;
+                      setNames(newNames);
+                    }}
+                    placeholder={isBot ? DEFAULT_BOT_NAMES[i] : `Player ${i + 1}`}
+                    className="h-11 w-full min-w-0 flex-1 rounded-xl border border-white/15 bg-white/5 px-3 text-sm text-white placeholder:text-white/35 backdrop-blur-sm transition-colors focus:border-primary/60 focus:outline-none"
+                  />
+                  {/* Human/Bot pill toggle */}
+                  <div className="flex shrink-0 items-center rounded-full border border-white/15 bg-black/30 p-0.5 backdrop-blur-md">
+                    <button
+                      type="button"
+                      onClick={() => isBot && toggleBot(i)}
+                      disabled={!isBot}
+                      aria-label={`Player ${i + 1} human`}
+                      className={
+                        "flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide transition-all " +
+                        (!isBot
+                          ? "bg-primary/20 text-primary shadow-[0_2px_6px_oklch(0.7_0.15_70/0.25)]"
+                          : "text-white/50 hover:text-white/80")
+                      }
+                    >
+                      <User className="size-3" />
+                      Human
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => !isBot && toggleBot(i)}
+                      disabled={isBot || wouldLeaveNoHumans}
+                      aria-label={`Player ${i + 1} bot`}
+                      className={
+                        "flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide transition-all disabled:cursor-not-allowed disabled:opacity-40 " +
+                        (isBot
+                          ? "bg-secondary/20 text-secondary shadow-[0_2px_6px_oklch(0.6_0.12_200/0.3)]"
+                          : "text-white/50 hover:text-white/80")
+                      }
+                    >
+                      <Cpu className="size-3" />
+                      Bot
+                    </button>
+                  </div>
                 </div>
-                <input
-                  value={names[i]}
-                  onChange={(e) => {
-                    const newNames = [...names];
-                    newNames[i] = e.target.value;
-                    setNames(newNames);
-                  }}
-                  placeholder={`Player ${i + 1}`}
-                  className="h-11 w-full rounded-xl border border-white/15 bg-white/5 px-3 text-sm text-white placeholder:text-white/35 backdrop-blur-sm transition-colors focus:border-primary/60 focus:outline-none"
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </motion.div>
 
@@ -274,14 +353,20 @@ export default function GameSetup() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            whileHover={canStart ? { scale: 1.03 } : undefined}
+            whileTap={canStart ? { scale: 0.97 } : undefined}
             onClick={handleStartGame}
-            className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl border-2 border-primary/60 bg-gradient-to-b from-primary to-primary/70 text-lg font-bold uppercase tracking-wider text-primary-foreground shadow-[0_7px_0_0_oklch(0.5_0.12_55),0_14px_30px_oklch(0_0_0/0.5)] transition-all hover:shadow-[0_5px_0_0_oklch(0.5_0.12_55),0_10px_24px_oklch(0_0_0/0.55)] active:translate-y-1 active:shadow-[0_4px_0_0_oklch(0.5_0.12_55),0_6px_14px_oklch(0_0_0/0.5)]"
+            disabled={!canStart}
+            className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl border-2 border-primary/60 bg-gradient-to-b from-primary to-primary/70 text-lg font-bold uppercase tracking-wider text-primary-foreground shadow-[0_7px_0_0_oklch(0.5_0.12_55),0_14px_30px_oklch(0_0_0/0.5)] transition-all hover:shadow-[0_5px_0_0_oklch(0.5_0.12_55),0_10px_24px_oklch(0_0_0/0.55)] active:translate-y-1 active:shadow-[0_4px_0_0_oklch(0.5_0.12_55),0_6px_14px_oklch(0_0_0/0.5)] disabled:cursor-not-allowed disabled:border-white/15 disabled:from-white/5 disabled:to-white/5 disabled:text-white/30 disabled:shadow-none"
           >
             <Play className="size-5" />
             Start Game
           </motion.button>
+          {!canStart && (
+            <p className="mt-2 text-center text-[11px] text-destructive/80">
+              At least one human player is required.
+            </p>
+          )}
         </div>
       </div>
     </div>

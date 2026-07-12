@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "convex/react";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useGameRoom } from "@/hooks/use-game-room";
+import { useGameRoom, useMatchmaking } from "@/hooks/use-game-room";
 import { useAuth } from "@/hooks/use-auth";
 import { BOARD_CONFIGS } from "@/lib/game-engine";
 import type { BoardMode } from "@/lib/game-engine";
@@ -24,6 +24,8 @@ import {
   Skull,
   RefreshCw,
   Wifi,
+  Swords,
+  X,
 } from "lucide-react";
 import { LandscapePrompt } from "@/components/game/LandscapePrompt";
 
@@ -37,7 +39,7 @@ type LobbyPhase = "menu" | "creating" | "joining" | "waiting" | "starting";
 
 export default function OnlineLobby() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const activeGames = useQuery(api.games.getUserActiveGames);
   const activeGamesLoading = activeGames === undefined;
 
@@ -55,6 +57,12 @@ export default function OnlineLobby() {
     "friends",
   );
 
+  // Quick Match (real matchmaking) state
+  const { myQueueEntry, joinQueue, leaveQueue } = useMatchmaking();
+  const [qmBoard, setQmBoard] = useState<BoardMode>("classic");
+  const [qmLoading, setQmLoading] = useState(false);
+  const matchedNavRef = useRef<string | null>(null);
+
   const { game, createGame, joinGame, startGame } = useGameRoom(
     phase === "waiting" || phase === "starting" ? createCode || joinCode : null,
   );
@@ -65,6 +73,19 @@ export default function OnlineLobby() {
       navigate(`/game/online/${createCode || joinCode}`, { replace: true });
     }
   }, [game?.status, createCode, joinCode, navigate]);
+
+  // Navigate to the matched Quick Match game once. Track the last roomCode we
+  // navigated to so a re-render doesn't push twice.
+  useEffect(() => {
+    if (
+      myQueueEntry?.status === "matched" &&
+      myQueueEntry.roomCode &&
+      matchedNavRef.current !== myQueueEntry.roomCode
+    ) {
+      matchedNavRef.current = myQueueEntry.roomCode;
+      navigate(`/game/online/${myQueueEntry.roomCode}`, { replace: true });
+    }
+  }, [myQueueEntry, navigate]);
 
   const handleCreate = async () => {
     setIsLoading(true);
@@ -115,6 +136,30 @@ export default function OnlineLobby() {
       );
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleFindMatch = async () => {
+    setQmLoading(true);
+    try {
+      await joinQueue({ boardId: qmBoard });
+      toast.success("Searching for an opponent...");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to join queue",
+      );
+    } finally {
+      setQmLoading(false);
+    }
+  };
+
+  const handleCancelMatch = async () => {
+    try {
+      await leaveQueue();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to cancel search",
+      );
     }
   };
 
@@ -455,21 +500,148 @@ export default function OnlineLobby() {
                   )}
 
                   {lobbyMode === "quickmatch" && (
-                    <div className="space-y-4 rounded-2xl border border-white/15 bg-black/30 p-5 text-center backdrop-blur-md">
-                      <h2 className="flex items-center justify-center gap-2 font-display text-base font-bold text-white/95">
+                    <div className="space-y-4 rounded-2xl border border-white/15 bg-black/30 p-5 backdrop-blur-md">
+                      <h2 className="flex items-center gap-2 font-display text-base font-bold text-white/95">
                         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary/20 ring-1 ring-secondary/30">
-                          <Wifi className="h-4 w-4 text-secondary" />
+                          <Swords className="h-4 w-4 text-secondary" />
                         </span>
                         Quick Match
                       </h2>
-                      <p className="text-sm text-white/55">
-                        Matchmaking with strangers coming soon. For now, create
-                        a private room and share the code.
-                      </p>
-                      <Button className="w-full" disabled>
-                        <Loader2 className="mr-2 h-4 w-4" />
-                        Find Match
-                      </Button>
+
+                      {!isAuthenticated && !isAuthLoading ? (
+                        <div className="space-y-3 text-center">
+                          <p className="text-sm text-white/55">
+                            Sign in to play Quick Match against other players
+                            online.
+                          </p>
+                          <Button
+                            className="h-12 w-full font-semibold shadow-[0_6px_0_0_oklch(0.5_0.12_55)] hover:shadow-[0_4px_0_0_oklch(0.5_0.12_55)] active:translate-y-0.5"
+                            onClick={() => navigate("/auth")}
+                          >
+                            <LogIn className="mr-2 h-4 w-4" />
+                            Sign In to Play
+                          </Button>
+                        </div>
+                      ) : myQueueEntry?.status === "searching" ? (
+                        <div className="space-y-4 text-center">
+                          <div className="space-y-3 py-2">
+                            <div className="relative mx-auto flex h-20 w-20 items-center justify-center">
+                              <span className="absolute h-20 w-20 animate-ping rounded-full bg-secondary/30" />
+                              <span className="absolute h-14 w-14 animate-pulse rounded-full bg-secondary/20" />
+                              <Loader2 className="relative h-7 w-7 animate-spin text-secondary" />
+                            </div>
+                            <p className="font-display text-sm font-semibold text-white/95">
+                              Searching for opponent...
+                            </p>
+                            <p className="text-xs text-white/55">
+                              {myQueueEntry.boardId === "venom"
+                                ? "Venom Mode"
+                                : "Classic Mode"}{" "}
+                              · Finding a match
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            className="h-11 w-full border-destructive/40 bg-destructive/10 font-semibold text-destructive hover:bg-destructive/20"
+                            onClick={handleCancelMatch}
+                          >
+                            <X className="mr-2 h-4 w-4" />
+                            Cancel Search
+                          </Button>
+                        </div>
+                      ) : myQueueEntry?.status === "matched" ? (
+                        <div className="space-y-3 py-2 text-center">
+                          <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-secondary/20 ring-2 ring-secondary/40">
+                            <Check className="h-7 w-7 text-secondary" />
+                          </div>
+                          <p className="font-display text-sm font-bold text-secondary">
+                            Match found!
+                          </p>
+                          <p className="text-xs text-white/55">
+                            Opponent: {myQueueEntry.opponentName ?? "Player"}
+                          </p>
+                          <p className="text-xs text-white/40">
+                            Joining game...
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Board Mode selector */}
+                          <div className="space-y-2">
+                            <p className="text-xs font-medium text-white/55">
+                              Board Mode
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {(["classic", "venom"] as BoardMode[]).map(
+                                (mode) => {
+                                  const config = BOARD_CONFIGS[mode];
+                                  const isSelected = qmBoard === mode;
+                                  return (
+                                    <button
+                                      key={mode}
+                                      type="button"
+                                      onClick={() => setQmBoard(mode)}
+                                      className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-3 transition-all hover:-translate-y-0.5 cursor-pointer ${
+                                        isSelected
+                                          ? mode === "venom"
+                                            ? "border-destructive bg-destructive/15"
+                                            : "border-primary bg-primary/15"
+                                          : "border-white/15 bg-white/5 hover:border-white/30 hover:bg-white/10"
+                                      }`}
+                                    >
+                                      {mode === "venom" ? (
+                                        <Skull
+                                          className={`h-4 w-4 ${
+                                            isSelected
+                                              ? "text-destructive"
+                                              : "text-white/60"
+                                          }`}
+                                        />
+                                      ) : (
+                                        <Play
+                                          className={`h-4 w-4 ${
+                                            isSelected
+                                              ? "text-primary"
+                                              : "text-white/60"
+                                          }`}
+                                        />
+                                      )}
+                                      <span
+                                        className={`text-xs font-semibold ${
+                                          isSelected
+                                            ? mode === "venom"
+                                              ? "text-destructive"
+                                              : "text-primary"
+                                            : "text-white/70"
+                                        }`}
+                                      >
+                                        {config.name}
+                                      </span>
+                                    </button>
+                                  );
+                                },
+                              )}
+                            </div>
+                          </div>
+
+                          <Button
+                            className="h-12 w-full font-semibold shadow-[0_6px_0_0_oklch(0.5_0.12_55)] hover:shadow-[0_4px_0_0_oklch(0.5_0.12_55)] active:translate-y-0.5"
+                            onClick={handleFindMatch}
+                            disabled={qmLoading || isAuthLoading}
+                          >
+                            {qmLoading ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Swords className="mr-2 h-4 w-4" />
+                            )}
+                            Find Match
+                          </Button>
+                          <p className="text-center text-xs text-white/45">
+                            Matched with a random opponent. Games start
+                            instantly when an opponent is found.
+                          </p>
+                        </>
+                      )}
                     </div>
                   )}
                 </motion.div>

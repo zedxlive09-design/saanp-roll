@@ -12,12 +12,14 @@ export interface PlayerSetup {
   id: string;
   name: string;
   color: string;
+  isBot?: boolean; // true for AI players (local mode only)
 }
 
 export interface PlayerState {
   id: string;
   name: string;
   color: string;
+  isBot?: boolean;
   position: number;
   consecutiveSixes: number;
 }

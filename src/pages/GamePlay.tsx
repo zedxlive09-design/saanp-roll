@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Board } from "@/components/game/Board";
 import { DiceRoll } from "@/components/game/DiceRoll";
+import type { DiceRollHandle } from "@/components/game/DiceRoll";
 import {
   createInitialGameState,
   applyRoll,
@@ -13,16 +14,16 @@ import {
   getSnakeTail,
   getLadderTop,
 } from "@/lib/game-engine";
-import type { BoardMode, GameState } from "@/lib/game-engine";
+import type { BoardMode, GameState, PlayerSetup } from "@/lib/game-engine";
 import { soundManager } from "@/lib/sounds";
-import { ArrowLeft, RefreshCw, ScrollText } from "lucide-react";
+import { ArrowLeft, RefreshCw, ScrollText, Cpu } from "lucide-react";
 import { LandscapePrompt } from "@/components/game/LandscapePrompt";
 import { useDeviceSpec } from "@/hooks/use-device-spec";
 import { haptics } from "@/lib/haptics";
 
 interface LocationState {
   boardMode: BoardMode;
-  players: Array<{ id: string; name: string; color: string }>;
+  players: PlayerSetup[];
 }
 
 export default function GamePlay() {
@@ -61,11 +62,22 @@ function GamePlayInner({
   } | null>(null);
   const animTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const diceRef = useRef<DiceRollHandle | null>(null);
+  // Refs mirroring the latest isResolving / isGameOver so the bot timeout's
+  // fire-time guard reads fresh values instead of a stale closure.
+  const isResolvingRef = useRef(false);
+  const isGameOverRef = useRef(false);
 
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
   const isGameOver = gameState.status === "game_over";
   const winner = gameState.players.find((p) => p.id === gameState.winnerId);
   const isExtraRoll = gameState.turnPhase === "extra_roll";
+  const isBotTurn = !!currentPlayer?.isBot && !isGameOver;
+
+  // Mirror the latest flags into refs (after they're declared) so the bot
+  // timeout's fire-time guard reads fresh values instead of a stale closure.
+  isResolvingRef.current = isResolving;
+  isGameOverRef.current = isGameOver;
 
   // Update the animated tile position as we step through
   const [animatedPositions, setAnimatedPositions] = useState<
@@ -89,6 +101,39 @@ function GamePlayInner({
       }
     };
   }, []);
+
+  // === Bot auto-roll ===
+  // When it's a bot's turn and nothing is being resolved, wait a short
+  // "thinking" delay (800–1500ms) then trigger the same dice tumble the
+  // human player gets — via the DiceRoll imperative handle. The effect
+  // re-runs whenever the current player changes, the resolving flag flips,
+  // or the game ends; the cleanup cancels any pending roll on those
+  // transitions. Extra rolls (rolled a 6) are handled naturally because
+  // `isResolving` flips back to false while the bot stays the current
+  // player, re-triggering this effect.
+  useEffect(() => {
+    if (isGameOver) return;
+    if (isResolving) return;
+    if (!currentPlayer?.isBot) return;
+    // Guard: don't schedule if the dice handle isn't mounted yet.
+    const dice = diceRef.current;
+    if (!dice) return;
+
+    const delay = 800 + Math.random() * 700; // 800–1500ms "thinking" pause
+    const timeout = setTimeout(() => {
+      // Re-check at fire time — state may have changed during the wait.
+      if (isResolvingRef.current || isGameOverRef.current) return;
+      diceRef.current?.roll();
+    }, delay);
+
+    return () => clearTimeout(timeout);
+  }, [
+    currentPlayer?.id,
+    currentPlayer?.isBot,
+    isResolving,
+    isGameOver,
+    isExtraRoll,
+  ]);
 
   const handleRoll = useCallback(
     (roll: number) => {
@@ -310,6 +355,14 @@ function GamePlayInner({
                   <span className="text-[11px] font-semibold text-white/90">
                     {player.position}
                   </span>
+                  {player.isBot && (
+                    <span
+                      className="flex size-3.5 items-center justify-center rounded-full bg-secondary/25 text-secondary ring-1 ring-secondary/40"
+                      title="Bot"
+                    >
+                      <Cpu className="size-2" />
+                    </span>
+                  )}
                   {winner?.id === player.id && <span className="text-xs">👑</span>}
                 </div>
               );
@@ -348,8 +401,9 @@ function GamePlayInner({
             {!isGameOver && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <DiceRoll
+                  ref={diceRef}
                   onRoll={handleRoll}
-                  disabled={isResolving || isGameOver}
+                  disabled={isResolving || isGameOver || isBotTurn}
                   currentPlayerColor={currentPlayer?.color}
                   isExtraRoll={isExtraRoll}
                 />
@@ -384,9 +438,23 @@ function GamePlayInner({
                   {animatingPlayer ? "Moving…" : "Resolving…"}
                 </span>
               )}
+              {isBotTurn && !isResolving && (
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-secondary/90">
+                  <span className="relative flex size-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-secondary/70 opacity-75" />
+                    <span className="relative inline-flex size-2 rounded-full bg-secondary" />
+                  </span>
+                  thinking…
+                </span>
+              )}
             </motion.div>
-            {!isResolving && (
+            {!isResolving && !isBotTurn && (
               <p className="text-[11px] text-white/60">Tap the dice to roll</p>
+            )}
+            {isBotTurn && !isResolving && (
+              <p className="text-[11px] text-secondary/70">
+                {currentPlayer?.name} is rolling…
+              </p>
             )}
           </div>
         )}

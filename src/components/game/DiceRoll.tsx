@@ -35,7 +35,7 @@ interface DiceRollProps {
 function Face({ value }: { value: number }) {
   const pips = PIPS[value];
   return (
-    <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 rounded-lg border border-amber-900/20 bg-gradient-to-br from-amber-50 to-amber-100 p-1.5 shadow-inner">
+    <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 rounded-lg border-2 border-amber-900/30 bg-amber-50 p-1.5 shadow-inner">
       {Array.from({ length: 9 }).map((_, i) => {
         const row = Math.floor(i / 3);
         const col = i % 3;
@@ -44,7 +44,7 @@ function Face({ value }: { value: number }) {
           <div key={i} className="flex items-center justify-center">
             {hasPip && (
               <div
-                className="size-2 rounded-full bg-gradient-to-br from-stone-700 to-stone-900"
+                className="size-2.5 rounded-full bg-gradient-to-br from-stone-700 to-stone-900"
                 style={{ boxShadow: "inset 0 1px 1px oklch(0 0 0 / 0.4)" }}
               />
             )}
@@ -164,10 +164,10 @@ export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceR
         disabled={disabled || rolling}
         className="relative cursor-pointer select-none"
         style={{
-          width: 200,
-          height: 200,
+          width: 120,
+          height: 120,
           perspective: 600,
-          opacity: disabled ? 0.4 : 1,
+          opacity: disabled ? 0.7 : 1,
           background: "transparent",
           border: "none",
         }}
@@ -177,8 +177,8 @@ export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceR
         <div
           className="absolute left-1/2 top-1/2 rounded-full bg-black/50"
           style={{
-            width: 40,
-            height: 10,
+            width: 50,
+            height: 12,
             filter: "blur(4px)",
             transform: `translate(calc(-50% + ${currentPos.x * 0.3}px), calc(-50% + 30px)) scale(${currentPos.scale * (1 - Math.abs(currentPos.y) / 100)})`,
             opacity: 0.3 + currentPos.scale * 0.2,
@@ -188,7 +188,7 @@ export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceR
         {!rolling && !disabled && showGlow && (
           <div
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full animate-pulse"
-            style={{ width: 80, height: 80, boxShadow: `0 0 20px 4px ${currentPlayerColor}80` }}
+            style={{ width: 100, height: 100, boxShadow: `0 0 24px 6px ${currentPlayerColor}80` }}
           />
         )}
         {/* The 3D cube — throws from edge, tumbles across, settles */}
@@ -203,12 +203,12 @@ export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceR
             transition: rolling ? "none" : "transform 0.3s ease, opacity 0.2s ease",
           }}
         >
-          <div className="absolute" style={{ width: 44, height: 44, transform: "translateZ(22px)" }}><Face value={1} /></div>
-          <div className="absolute" style={{ width: 44, height: 44, transform: "rotateY(90deg) translateZ(22px)" }}><Face value={2} /></div>
-          <div className="absolute" style={{ width: 44, height: 44, transform: "rotateX(90deg) translateZ(22px)" }}><Face value={3} /></div>
-          <div className="absolute" style={{ width: 44, height: 44, transform: "rotateX(-90deg) translateZ(22px)" }}><Face value={4} /></div>
-          <div className="absolute" style={{ width: 44, height: 44, transform: "rotateY(-90deg) translateZ(22px)" }}><Face value={5} /></div>
-          <div className="absolute" style={{ width: 44, height: 44, transform: "rotateY(180deg) translateZ(22px)" }}><Face value={6} /></div>
+          <div className="absolute" style={{ width: 44, height: 44, transform: "translateZ(30px)" }}><Face value={1} /></div>
+          <div className="absolute" style={{ width: 60, height: 60, transform: "rotateY(90deg) translateZ(30px)" }}><Face value={2} /></div>
+          <div className="absolute" style={{ width: 60, height: 60, transform: "rotateX(90deg) translateZ(30px)" }}><Face value={3} /></div>
+          <div className="absolute" style={{ width: 60, height: 60, transform: "rotateX(-90deg) translateZ(30px)" }}><Face value={4} /></div>
+          <div className="absolute" style={{ width: 60, height: 60, transform: "rotateY(-90deg) translateZ(30px)" }}><Face value={5} /></div>
+          <div className="absolute" style={{ width: 60, height: 60, transform: "rotateY(180deg) translateZ(30px)" }}><Face value={6} /></div>
         </div>
       </button>
 

@@ -1,11 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
   "rewrites": [
-    { "source": "/((?!.*\\.).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|_next/|manifest.json|icon-master.png|splash.png|logo.svg|sw.js|workbox).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
-      "source": "/manifest.webmanifest",
+      "source": "/manifest.json",
       "headers": [
         { "key": "Content-Type", "value": "application/manifest+json" },
         { "key": "Cache-Control", "value": "no-cache" }
@@ -16,12 +17,6 @@
       "headers": [
         { "key": "Cache-Control", "value": "no-cache" },
         { "key": "Service-Worker-Allowed", "value": "/" }
-      ]
-    },
-    {
-      "source": "/(.*)\\.(js|css|woff2|woff|png|svg|ico)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     }
   ]

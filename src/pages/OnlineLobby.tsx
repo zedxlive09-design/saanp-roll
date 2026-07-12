@@ -75,6 +75,10 @@ export default function OnlineLobby() {
   const { myQueueEntry, joinQueue, leaveQueue } = useMatchmaking();
   const [qmBoard, setQmBoard] = useState<BoardMode>("classic");
   const [qmLoading, setQmLoading] = useState(false);
+  // Optimistic searching state — shown immediately on click, before Convex confirms
+  const [qmSearching, setQmSearching] = useState(false);
+  const [qmElapsed, setQmElapsed] = useState(0);
+  const [qmError, setQmError] = useState<string | null>(null);
   const matchedNavRef = useRef<string | null>(null);
 
   const { game, createGame, joinGame, startGame } = useGameRoom(
@@ -100,6 +104,26 @@ export default function OnlineLobby() {
       navigate(`/game/online/${myQueueEntry.roomCode}`, { replace: true });
     }
   }, [myQueueEntry, navigate]);
+
+  // Elapsed timer for searching state
+  useEffect(() => {
+    if (!qmSearching) {
+      setQmElapsed(0);
+      return;
+    }
+    const start = Date.now();
+    const interval = setInterval(() => {
+      setQmElapsed(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [qmSearching]);
+
+  // Stop optimistic searching when Convex confirms matched or searching is over
+  useEffect(() => {
+    if (myQueueEntry?.status === "matched") {
+      setQmSearching(false);
+    }
+  }, [myQueueEntry?.status]);
 
   const handleCreate = async () => {
     if (entryFee > 0 && !isAuthenticated) {
@@ -178,25 +202,28 @@ export default function OnlineLobby() {
 
   const handleFindMatch = async () => {
     setQmLoading(true);
+    setQmError(null);
+    // Optimistic: show searching screen IMMEDIATELY
+    setQmSearching(true);
     try {
       await joinQueue({ boardId: qmBoard });
-      toast.success("Searching for an opponent...");
+      // Convex confirmed — searching state stays until matched
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to join queue",
-      );
+      setQmSearching(false);
+      const msg = err instanceof Error ? err.message : "Failed to join queue";
+      setQmError(msg);
+      toast.error(msg);
     } finally {
       setQmLoading(false);
     }
   };
 
   const handleCancelMatch = async () => {
+    setQmSearching(false);
     try {
       await leaveQueue();
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to cancel search",
-      );
+    } catch {
+      // Even if the server call fails, we already stopped searching locally
     }
   };
 
@@ -628,31 +655,49 @@ export default function OnlineLobby() {
                             Sign In to Play
                           </Button>
                         </div>
-                      ) : myQueueEntry?.status === "searching" ? (
-                        <div className="space-y-4 text-center">
-                          <div className="space-y-3 py-2">
-                            <div className="relative mx-auto flex h-20 w-20 items-center justify-center">
-                              <span className="absolute h-20 w-20 animate-ping rounded-full bg-secondary/30" />
-                              <span className="absolute h-14 w-14 animate-pulse rounded-full bg-secondary/20" />
-                              <Loader2 className="relative h-7 w-7 animate-spin text-secondary" />
-                            </div>
-                            <p className="font-display text-sm font-semibold text-white/95">
-                              Searching for opponent...
+                      ) : (qmSearching || myQueueEntry?.status === "searching") ? (
+                        <div className="space-y-5 py-4 text-center">
+                          {/* Big 8BP-style searching spinner */}
+                          <div className="relative mx-auto flex h-28 w-28 items-center justify-center">
+                            <span className="absolute h-28 w-28 animate-ping rounded-full bg-secondary/20" />
+                            <span className="absolute h-20 w-20 animate-pulse rounded-full bg-secondary/15" />
+                            <span className="absolute h-12 w-12 rounded-full bg-secondary/10" />
+                            <Loader2 className="relative h-8 w-8 animate-spin text-secondary" />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="font-display text-base font-bold text-white/95">
+                              Finding Opponent
                             </p>
-                            <p className="text-xs text-white/55">
-                              {myQueueEntry.boardId === "venom"
-                                ? "Venom Mode"
-                                : "Classic Mode"}{" "}
-                              · Finding a match
+                            <p className="text-xs text-white/50">
+                              {qmBoard === "venom" ? "Venom Mode" : "Classic Mode"}
+                              {" · "}
+                              {qmElapsed}s elapsed
                             </p>
                           </div>
+                          {/* Progress dots */}
+                          <div className="flex items-center justify-center gap-1.5">
+                            {[0, 1, 2].map((i) => (
+                              <span
+                                key={i}
+                                className="h-1.5 w-1.5 rounded-full bg-secondary/60"
+                                style={{
+                                  animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                                }}
+                              />
+                            ))}
+                          </div>
+                          {qmElapsed > 15 && (
+                            <p className="text-[11px] text-white/40">
+                              Taking a while? Bots will fill in if no opponent is found.
+                            </p>
+                          )}
                           <Button
                             variant="outline"
                             className="h-11 w-full border-destructive/40 bg-destructive/10 font-semibold text-destructive hover:bg-destructive/20"
                             onClick={handleCancelMatch}
                           >
                             <X className="mr-2 h-4 w-4" />
-                            Cancel Search
+                            Cancel
                           </Button>
                         </div>
                       ) : myQueueEntry?.status === "matched" ? (
@@ -742,6 +787,11 @@ export default function OnlineLobby() {
                             )}
                             Find Match
                           </Button>
+                          {qmError && (
+                            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-xs text-destructive">
+                              {qmError}
+                            </div>
+                          )}
                           <p className="text-center text-xs text-white/45">
                             Matched with a random opponent. Games start
                             instantly when an opponent is found.

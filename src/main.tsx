@@ -38,7 +38,10 @@ function RouteLoading() {
 // Guard against a missing VITE_CONVEX_URL — without this the constructor
 // throws "No address provided" and the user sees a white screen. Instead we
 // render a game-styled connection-error screen with a Retry button.
-const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
+const rawUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
+// Strip trailing slashes — a trailing "/" causes "wss://host//api/..." (double slash)
+// which breaks the websocket connection.
+const convexUrl = rawUrl ? rawUrl.replace(/\/+$/, "") : undefined;
 const convex = convexUrl ? new ConvexReactClient(convexUrl) : null;
 
 /**

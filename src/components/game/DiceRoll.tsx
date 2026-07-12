@@ -71,14 +71,14 @@ export function DiceRoll({
         onClick={handleRoll}
         disabled={disabled || rolling}
         className={cn(
-          "relative w-20 h-20 rounded-xl shadow-lg cursor-pointer select-none",
+          "relative w-24 h-24 rounded-2xl shadow-lg cursor-pointer select-none",
           "border-2 transition-colors duration-200",
           disabled
             ? "opacity-50 cursor-not-allowed"
             : "hover:shadow-xl active:shadow-md",
         )}
         style={{
-          backgroundColor: "#fafaf9",
+          backgroundColor: "#fdfbf3",
           borderColor: currentPlayerColor,
         }}
         // 3D tumble animation during roll
@@ -160,7 +160,7 @@ export function DiceRoll({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="text-xs font-medium text-amber-600"
+            className="text-xs font-medium text-primary"
           >
             🎲 Extra roll!
           </motion.span>

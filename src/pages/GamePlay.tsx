@@ -17,6 +17,8 @@ import type { BoardMode, GameState } from "@/lib/game-engine";
 import { soundManager } from "@/lib/sounds";
 import { ArrowLeft, RefreshCw, ScrollText } from "lucide-react";
 import { LandscapePrompt } from "@/components/game/LandscapePrompt";
+import { useDeviceSpec } from "@/hooks/use-device-spec";
+import { haptics } from "@/lib/haptics";
 
 interface LocationState {
   boardMode: BoardMode;
@@ -91,6 +93,7 @@ function GamePlayInner({
   const handleRoll = useCallback(
     (roll: number) => {
       if (isResolving || isGameOver) return;
+      haptics.roll();
       setIsResolving(true);
       setLastRollValue(roll);
 
@@ -228,259 +231,254 @@ function GamePlayInner({
     };
   });
 
+  const { quality, isMobile, reducedMotion } = useDeviceSpec();
+  const isHighSpec = quality === "high";
+
   // Auto-scroll move log when new entries are added
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [gameState.moveLog.length]);
 
+  // 3D tilt angle — less extreme on mobile for readability, none on low-spec
+  const tilt = isHighSpec ? (isMobile ? 38 : 52) : 0;
+
   return (
     <>
-    <LandscapePrompt />
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="min-h-screen bg-gradient-to-b from-background to-secondary/20"
-    >
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/home")}
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="font-display text-base font-bold tracking-tight">
-                {BOARD_CONFIGS[boardMode].name}
-              </h1>
-              <p className="text-[11px] text-muted-foreground">
-                Turn{" "}
-                {gameState.moveLog.length > 0
-                  ? Math.ceil(
-                      gameState.moveLog.length / gameState.players.length,
-                    )
-                  : 1}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setShowMoveLog(!showMoveLog)}
-              className={showMoveLog ? "bg-accent" : ""}
-            >
-              <ScrollText className="h-4 w-4" />
-            </Button>
-            {isGameOver && (
-              <Button variant="outline" size="sm" onClick={handleNewGame}>
-                <RefreshCw className="mr-1 h-3 w-3" />
-                New
-              </Button>
-            )}
-          </div>
-        </div>
-      </header>
+      <LandscapePrompt />
+      <div
+        className="fixed inset-0 overflow-hidden"
+        style={{
+          // Full-bleed felt table — radial gradient (no blur = cheap on low-spec)
+          background:
+            boardMode === "venom"
+              ? "radial-gradient(ellipse at 50% 35%, oklch(0.26 0.04 200) 0%, oklch(0.16 0.03 200) 70%, oklch(0.12 0.02 200) 100%)"
+              : "radial-gradient(ellipse at 50% 35%, oklch(0.4 0.06 150) 0%, oklch(0.28 0.05 150) 70%, oklch(0.2 0.04 150) 100%)",
+        }}
+      >
+        {/* Warm spotlight overlay (static gradient, no filter) */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse at 50% 30%, oklch(1 0.02 80 / 0.12) 0%, transparent 55%)",
+          }}
+        />
+        {/* Vignette for depth (static) */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            boxShadow: "inset 0 0 220px 60px oklch(0 0 0 / 0.45)",
+          }}
+        />
 
-      <main className="mx-auto max-w-2xl px-4 py-4 space-y-4">
-        {/* Game Over Banner */}
-        <AnimatePresence>
-          {isGameOver && winner && (
-            <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="rounded-2xl border-2 border-primary/50 bg-gradient-to-br from-primary/10 via-primary/5 to-card p-6 text-center shadow-paper-lg"
-            >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", delay: 0.2 }}
-                className="text-5xl mb-3"
-              >
-                🏆
-              </motion.div>
-              <h2 className="font-display text-2xl font-bold text-primary">
-                {winner.name} Wins!
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Reached tile 100 in {gameState.moveLog.length} moves
-              </p>
-              <div className="flex items-center justify-center gap-3 mt-4">
-                <Button
-                  variant="default"
-                  onClick={handleRematch}
-                  className="bg-primary hover:bg-primary/90"
+        {/* === Top HUD: player chips === */}
+        <div className="absolute top-0 left-0 right-0 z-20 flex items-start justify-between gap-2 p-3 safe-top">
+          {/* Back + mode */}
+          <button
+            onClick={() => navigate("/home")}
+            className="flex size-10 items-center justify-center rounded-xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/40"
+            aria-label="Leave game"
+          >
+            <ArrowLeft className="size-5" />
+          </button>
+
+          {/* Player chips row */}
+          <div className="flex flex-1 flex-wrap items-center justify-center gap-1.5">
+            {displayPlayers.map((player, idx) => {
+              const isCurrent = idx === gameState.currentPlayerIndex && !isGameOver;
+              return (
+                <div
+                  key={player.id}
+                  className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 backdrop-blur-md transition-all"
+                  style={{
+                    backgroundColor: isCurrent
+                      ? `${player.color}30`
+                      : "oklch(0 0 0 / 0.35)",
+                    borderColor: isCurrent ? player.color : "oklch(1 0 0 / 0.12)",
+                    transform: isCurrent ? "scale(1.06)" : "scale(1)",
+                  }}
                 >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Rematch
-                </Button>
-                <Button variant="outline" onClick={handleNewGame}>
-                  New Game Setup
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                  <span
+                    className="flex size-5 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                    style={{ backgroundColor: player.color }}
+                  >
+                    {player.name.charAt(0).toUpperCase()}
+                  </span>
+                  <span className="text-[11px] font-semibold text-white/90">
+                    {player.position}
+                  </span>
+                  {winner?.id === player.id && <span className="text-xs">👑</span>}
+                </div>
+              );
+            })}
+          </div>
 
-        {/* Board with display players (may have animated positions) */}
-        <div className="flex justify-center">
-          <Board
-            boardId={boardMode}
-            players={displayPlayers}
-            highlightedTile={highlightedTile}
-            className="max-w-[420px] w-full"
-          />
+          {/* Move log toggle */}
+          <button
+            onClick={() => setShowMoveLog(!showMoveLog)}
+            className="flex size-10 items-center justify-center rounded-xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/40"
+            aria-label="Toggle move log"
+          >
+            <ScrollText className="size-5" />
+          </button>
         </div>
 
-        {/* Player indicator & dice area */}
+        {/* === Center: 3D tilted board === */}
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{
+            perspective: isHighSpec ? "1200px" : "none",
+            // Shift board up slightly so it's centered visually with HUD
+            paddingTop: "3rem",
+          }}
+        >
+          <div
+            style={{
+              transform: tilt ? `rotateX(${tilt}deg)` : "none",
+              transformStyle: "preserve-3d",
+              transition: "transform 0.4s ease-out",
+              filter: isHighSpec
+                ? "drop-shadow(0 30px 40px oklch(0 0 0 / 0.5))"
+                : "drop-shadow(0 10px 15px oklch(0 0 0 / 0.4))",
+            }}
+          >
+            <Board
+              boardId={boardMode}
+              players={displayPlayers}
+              highlightedTile={highlightedTile}
+              className="w-[min(88vw,440px)] sm:w-[min(70vh,520px)]"
+            />
+          </div>
+        </div>
+
+        {/* === Bottom HUD: turn info + dice + roll button === */}
         {!isGameOver && (
-          <div className="space-y-4">
+          <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-3 p-4 safe-bottom">
+            {/* Turn indicator */}
             <motion.div
               key={currentPlayer?.id + gameState.turnPhase}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center justify-between rounded-xl border bg-card p-4 shadow-sm"
+              className="flex items-center gap-2.5 rounded-full border border-white/15 bg-black/40 px-4 py-1.5 backdrop-blur-md"
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className="h-10 w-10 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-sm"
-                  style={{ backgroundColor: currentPlayer?.color }}
-                >
-                  {currentPlayer?.name.charAt(0)}
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">
-                    {currentPlayer?.name}'s Turn
-                    {isExtraRoll && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-2 text-[10px] bg-primary/15 text-primary"
-                      >
-                        Extra Roll
-                      </Badge>
-                    )}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Position: {currentPlayer?.position || 0}
-                    {lastRollValue !== null && (
-                      <span className="ml-2">
-                        · Last roll:{" "}
-                        <span className="font-mono font-bold">
-                          {lastRollValue}
-                        </span>
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold font-mono">
-                  {currentPlayer?.position || 0}
-                </p>
-                <p className="text-[10px] text-muted-foreground">/ 100</p>
-              </div>
+              <span
+                className="size-3 rounded-full"
+                style={{ backgroundColor: currentPlayer?.color }}
+              />
+              <span className="text-sm font-semibold text-white/90">
+                {currentPlayer?.name}'s turn
+              </span>
+              {isExtraRoll && (
+                <span className="rounded-full bg-primary/30 px-2 py-0.5 text-[10px] font-bold text-primary-foreground">
+                  EXTRA ROLL
+                </span>
+              )}
+              {isResolving && (
+                <span className="text-[11px] text-white/60">
+                  {animatingPlayer ? "Moving…" : "Resolving…"}
+                </span>
+              )}
             </motion.div>
 
-            <div className="flex flex-col items-center py-2">
+            {/* Dice + roll area */}
+            <div className="flex flex-col items-center">
               <DiceRoll
                 onRoll={handleRoll}
                 disabled={isResolving || isGameOver}
                 currentPlayerColor={currentPlayer?.color}
                 isExtraRoll={isExtraRoll}
               />
-              <p className="text-xs text-muted-foreground mt-2">
-                {isResolving
-                  ? animatingPlayer
-                    ? "Moving piece..."
-                    : "Resolving..."
-                  : "Tap the dice to roll"}
-              </p>
+              {!isResolving && (
+                <p className="mt-2 text-[11px] text-white/60">
+                  Tap the dice to roll
+                </p>
+              )}
             </div>
           </div>
         )}
 
-        {/* Players progress */}
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            All Players
-          </p>
-          {displayPlayers.map((player, idx) => {
-            const isCurrent =
-              idx === gameState.currentPlayerIndex && !isGameOver;
-            return (
-              <div
-                key={player.id}
-                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all ${
-                  isCurrent
-                    ? "border-l-4 bg-accent/50"
-                    : "border-border"
-                }`}
-                style={{
-                  borderLeftColor: isCurrent ? player.color : undefined,
-                }}
+        {/* === Game Over overlay === */}
+        <AnimatePresence>
+          {isGameOver && winner && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.8, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 200, damping: 18 }}
+                className="mx-6 w-full max-w-sm rounded-3xl border border-primary/40 bg-gradient-to-br from-primary/15 via-card to-card p-8 text-center shadow-paper-lg"
               >
-                <div
-                  className="h-7 w-7 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold"
-                  style={{ backgroundColor: player.color }}
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", delay: 0.2 }}
+                  className="mb-3 text-6xl"
                 >
-                  {player.name.charAt(0)}
+                  🏆
+                </motion.div>
+                <h2 className="font-display text-3xl font-bold text-primary">
+                  {winner.name} Wins!
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Reached tile 100 in {gameState.moveLog.length} moves
+                </p>
+                <div className="mt-6 flex flex-col gap-2">
+                  <Button
+                    onClick={handleRematch}
+                    className="bg-primary text-base hover:bg-primary/90"
+                    size="lg"
+                  >
+                    <RefreshCw className="mr-2 size-4" />
+                    Rematch
+                  </Button>
+                  <Button variant="outline" onClick={handleNewGame} size="lg">
+                    New Game Setup
+                  </Button>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {player.name}
-                    {winner?.id === player.id && (
-                      <span className="ml-1.5">👑</span>
-                    )}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold font-mono">
-                    {player.position}
-                  </span>
-                  <div className="w-16 h-1.5 rounded-full bg-secondary overflow-hidden">
-                    <motion.div
-                      className="h-full rounded-full"
-                      style={{
-                        backgroundColor: player.color,
-                        width: `${(player.position / 100) * 100}%`,
-                      }}
-                      layout
-                      transition={{ type: "spring", stiffness: 100 }}
-                    />
-                  </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* === Move log slide-in drawer === */}
+        <AnimatePresence>
+          {showMoveLog && gameState.moveLog.length > 0 && (
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "tween", duration: 0.25 }}
+              className="absolute right-0 top-0 bottom-0 z-30 w-72 max-w-[80vw] border-l border-white/10 bg-black/70 backdrop-blur-lg safe-top safe-bottom"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 p-4">
+                <p className="font-display text-sm font-bold text-white/90">
+                  Move Log
+                </p>
+                <button
+                  onClick={() => setShowMoveLog(false)}
+                  className="text-white/60 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="max-h-[calc(100%-4rem)] overflow-y-auto p-4 scrollbar-thin">
+                <div className="space-y-1.5">
+                  {gameState.moveLog.map((log, i) => (
+                    <p key={i} className="text-xs leading-relaxed text-white/70">
+                      <span className="text-white/40">#{i + 1}</span> {log}
+                    </p>
+                  ))}
+                  <div ref={logEndRef} />
                 </div>
               </div>
-            );
-          })}
-        </div>
-
-        {/* Move log (collapsible) */}
-        {showMoveLog && gameState.moveLog.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="rounded-xl border bg-card p-4 max-h-48 overflow-y-auto"
-          >
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Move Log
-            </p>
-            <div className="space-y-1">
-              {gameState.moveLog.map((log, i) => (
-                <p key={i} className="text-xs text-muted-foreground">
-                  <span className="text-muted-foreground/50">#{i + 1}</span>{" "}
-                  {log}
-                </p>
-              ))}
-              <div ref={logEndRef} />
-            </div>
-          </motion.div>
-        )}
-      </main>
-    </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </>
   );
 }

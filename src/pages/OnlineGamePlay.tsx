@@ -310,7 +310,13 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
     }
   }, [game?._id, rollDiceOnline]);
 
-  // Loading state — full-bleed felt bg. Distinguish undefined (still
+  // Auto-scroll move log (null-safe — runs on every render, guards inside)
+  useEffect(() => {
+    if (!game?.moveLog?.length) return;
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [game?.moveLog?.length ?? 0]);
+
+    // Loading state — full-bleed felt bg. Distinguish undefined (still
   // loading) from null (game not found / invalid room code) so an invalid
   // code doesn't show "Loading..." forever.
   if (game === undefined) {
@@ -436,11 +442,6 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   const handleRematch = () => {
     navigate("/lobby");
   };
-
-  // Auto-scroll move log
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [game.moveLog.length]);
 
   return (
     <>

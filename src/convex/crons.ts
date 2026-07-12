@@ -18,7 +18,8 @@ import { internal } from "./_generated/api";
  */
 const crons = cronJobs();
 
-crons.interval("fill-bots", { seconds: 10 }, internal.bots.checkAndFillBots);
+// DISABLED: No auto-bot-fill in Friends mode (waiting games are all Friends rooms).
+// crons.interval("fill-bots", { seconds: 10 }, internal.bots.checkAndFillBots);
 crons.interval(
   "advance-bots",
   { seconds: 1 },

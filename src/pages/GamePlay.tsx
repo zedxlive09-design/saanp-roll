@@ -234,6 +234,55 @@ function GamePlayInner({
   const { quality, isMobile, reducedMotion } = useDeviceSpec();
   const isHighSpec = quality === "high";
 
+  // --- Camera focus system ---
+  // Shows full board at start. When the current player moves, zooms in to
+  // keep their tile in focus (pan + scale). Returns to full view when idle.
+  const [camScale, setCamScale] = useState(1);
+  const [camX, setCamX] = useState(0); // translate in % of board dimension
+  const [camY, setCamY] = useState(0);
+  const focusEnabled = isHighSpec && !reducedMotion;
+
+  // Focus the camera on a tile number (1-100). Tile 50 = board center.
+  function focusOnTile(tile: number) {
+    if (!focusEnabled) return;
+    // Tile position: row 0 (tiles 91-100) is top, row 9 (tiles 1-10) is bottom.
+    // We want to translate the board so the focus tile moves toward center,
+    // then scale up. Tile 50 is roughly center (row 5, middle col).
+    const row = 9 - Math.floor((tile - 1) / 10); // 0 (top) to 9 (bottom)
+    const col = ((tile - 1) % 10); // 0 to 9
+    // Center of board is row 4.5, col 4.5. Offset from center:
+    const rowOffset = row - 4.5; // -4.5 (top) to +4.5 (bottom)
+    const colOffset = col - 4.5;
+    // Scale: zoom in to 1.35x when focusing
+    const scale = 1.35;
+    // Translate: move board so the focus tile centers. Each tile = 10% of board.
+    // Negative because we move the board opposite to where we want to look.
+    const tx = -colOffset * 10 * (scale - 1) / scale;
+    const ty = -rowOffset * 10 * (scale - 1) / scale;
+    setCamScale(scale);
+    setCamX(tx);
+    setCamY(ty);
+  }
+
+  function resetCamera() {
+    setCamScale(1);
+    setCamX(0);
+    setCamY(0);
+  }
+
+  // Focus the camera on the highlighted tile (the action).
+  // When a piece lands, highlightedTile is set briefly — zoom in on it.
+  // When it clears (idle), return to full board view.
+  useEffect(() => {
+    if (isGameOver || !highlightedTile) {
+      resetCamera();
+      return;
+    }
+    if (highlightedTile > 0 && highlightedTile <= 100) {
+      focusOnTile(highlightedTile);
+    }
+  }, [highlightedTile, isGameOver]);
+
   // Auto-scroll move log when new entries are added
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -332,15 +381,27 @@ function GamePlayInner({
               height: "min(calc(100vh - 8rem), 94vw)",
               maxHeight: "calc(100vh - 8rem)",
               maxWidth: "94vw",
+              overflow: camScale > 1 ? "hidden" : "visible",
+              borderRadius: camScale > 1 ? "1rem" : "0",
               filter: "drop-shadow(0 16px 28px oklch(0 0 0 / 0.55))",
             }}
           >
-            <Board
-              boardId={boardMode}
-              players={displayPlayers}
-              highlightedTile={highlightedTile}
-              className="h-full w-full"
-            />
+            <div
+              style={{
+                transform: `scale(${camScale}) translate(${camX}%, ${camY}%)`,
+                transformOrigin: "center center",
+                transition: "transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
+                width: "100%",
+                height: "100%",
+              }}
+            >
+              <Board
+                boardId={boardMode}
+                players={displayPlayers}
+                highlightedTile={highlightedTile}
+                className="h-full w-full"
+              />
+            </div>
 
             {/* Dice overlay — tumbles ON the board surface */}
             {!isGameOver && (

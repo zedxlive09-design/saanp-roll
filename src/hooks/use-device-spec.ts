@@ -35,8 +35,8 @@ export function useDeviceSpec(): {
 
     const mobile = coarse && small;
     let tier: QualityTier = "high";
-    if (reduce || mem < 4 || cores < 4) tier = "low";
-    if (mobile && (mem < 4 || cores < 4)) tier = "low";
+    if (reduce || mem < 2 || cores < 2) tier = "low";
+    if (mobile && (mem < 2 || cores < 2)) tier = "low";
 
     setSpec(tier);
     setIsMobile(mobile);

@@ -28,29 +28,29 @@ interface LeaderboardEntry {
 }
 
 function getPodiumIcon(rank: number) {
-  if (rank === 1) return { icon: Crown, color: "#eab308" };
-  if (rank === 2) return { icon: Medal, color: "#a8a8a8" };
-  if (rank === 3) return { icon: Medal, color: "#cd7f32" };
-  return { icon: TrendingUp, color: "#6366f1" };
+  if (rank === 1) return { icon: Crown, iconClass: "text-primary" };
+  if (rank === 2) return { icon: Medal, iconClass: "text-muted-foreground" };
+  if (rank === 3) return { icon: Medal, iconClass: "text-destructive" };
+  return { icon: TrendingUp, iconClass: "text-secondary" };
 }
 
 function getPodiumStyles(rank: number) {
   if (rank === 1)
     return {
-      bgColor: "bg-amber-50 dark:bg-amber-950/20",
-      borderColor: "border-amber-300 dark:border-amber-700",
+      cardClass: "bg-primary/10 border-primary/40",
+      rankClass: "bg-primary/15 ring-1 ring-primary/20 text-primary",
     };
   if (rank === 2)
     return {
-      bgColor: "bg-slate-50 dark:bg-slate-900/30",
-      borderColor: "border-slate-300 dark:border-slate-700",
+      cardClass: "bg-muted/60 border-border",
+      rankClass: "bg-muted text-muted-foreground",
     };
   if (rank === 3)
     return {
-      bgColor: "bg-orange-50 dark:bg-orange-950/20",
-      borderColor: "border-orange-300 dark:border-orange-700",
+      cardClass: "bg-destructive/10 border-destructive/40",
+      rankClass: "bg-destructive/15 ring-1 ring-destructive/20 text-destructive",
     };
-  return { bgColor: "", borderColor: "" };
+  return { cardClass: "", rankClass: "bg-muted text-muted-foreground" };
 }
 
 export default function Leaderboard() {
@@ -68,14 +68,14 @@ export default function Leaderboard() {
       className="min-h-screen bg-gradient-to-b from-background to-secondary/20"
     >
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
+      <header className="sticky top-0 z-10 border-b border-border/40 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
           <Button variant="ghost" size="icon" onClick={() => navigate("/home")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-3">
             <LogoDropdown />
-            <h1 className="text-lg font-bold tracking-tight">Leaderboard</h1>
+            <h1 className="font-display text-lg font-bold tracking-tight">Leaderboard</h1>
           </div>
         </div>
       </header>
@@ -93,7 +93,7 @@ export default function Leaderboard() {
               icon: Crown,
               label: "Top Player",
               value: topEntry?.name ?? "—",
-              color: "#eab308",
+              tint: "primary" as const,
             },
             {
               icon: Timer,
@@ -101,31 +101,36 @@ export default function Leaderboard() {
               value: isLoading
                 ? "..."
                 : String(entries.reduce((s, e) => s + e.games, 0)),
-              color: "#14b8a6",
+              tint: "secondary" as const,
             },
             {
               icon: Zap,
               label: "Top Wins",
               value: topEntry ? String(topEntry.wins) : "—",
-              color: "#f97316",
+              tint: "destructive" as const,
             },
           ].map((stat, i) => {
             const Icon = stat.icon;
+            const tintClasses =
+              stat.tint === "primary"
+                ? "bg-primary/15 ring-primary/20 text-primary"
+                : stat.tint === "secondary"
+                  ? "bg-secondary/15 ring-secondary/20 text-secondary"
+                  : "bg-destructive/15 ring-destructive/20 text-destructive";
             return (
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 * i }}
-                className="rounded-xl border bg-card p-3 text-center shadow-sm"
+                className="rounded-xl border bg-card p-3 text-center shadow-paper"
               >
                 <div
-                  className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: `${stat.color}15` }}
+                  className={`mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg ring-1 ${tintClasses}`}
                 >
-                  <Icon className="h-4 w-4" style={{ color: stat.color }} />
+                  <Icon className="h-4 w-4" />
                 </div>
-                <p className="text-sm font-bold truncate">{stat.value}</p>
+                <p className="text-sm font-bold font-display truncate">{stat.value}</p>
                 <p className="text-[11px] text-muted-foreground">
                   {stat.label}
                 </p>
@@ -147,9 +152,9 @@ export default function Leaderboard() {
             {entries.map((entry, i) => {
               const rank = i + 1;
               const isPodium = i < 3;
-              const { icon: EntryIcon, color: iconColor } =
+              const { icon: EntryIcon, iconClass } =
                 getPodiumIcon(rank);
-              const { bgColor, borderColor } = getPodiumStyles(rank);
+              const { cardClass, rankClass } = getPodiumStyles(rank);
               return (
                 <motion.div
                   key={entry.userId}
@@ -158,26 +163,16 @@ export default function Leaderboard() {
                   transition={{ delay: 0.04 * i }}
                 >
                   <Card
-                    className={`border shadow-sm hover:shadow-md transition-all ${
-                      isPodium ? `${bgColor} ${borderColor} border-2` : ""
+                    className={`border shadow-paper hover:shadow-paper-lg hover:-translate-y-0.5 transition-all ${
+                      isPodium ? `${cardClass} border-2` : ""
                     }`}
                   >
                     <CardContent className="flex items-center gap-3 p-4">
                       {/* Rank */}
                       <div
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${
-                          isPodium
-                            ? ""
-                            : "bg-muted text-muted-foreground"
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold font-display ${
+                          isPodium ? rankClass : "bg-muted text-muted-foreground"
                         }`}
-                        style={
-                          isPodium
-                            ? {
-                                backgroundColor: `${iconColor}20`,
-                                color: iconColor,
-                              }
-                            : {}
-                        }
                       >
                         #{rank}
                       </div>
@@ -188,8 +183,7 @@ export default function Leaderboard() {
                         style={{ backgroundColor: `${entry.color}15` }}
                       >
                         <EntryIcon
-                          className="h-5 w-5"
-                          style={{ color: iconColor }}
+                          className={`h-5 w-5 ${iconClass}`}
                         />
                       </div>
 
@@ -231,7 +225,7 @@ export default function Leaderboard() {
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
               <Trophy className="h-6 w-6 text-muted-foreground" />
             </div>
-            <p className="text-sm font-medium">No games played yet</p>
+            <p className="font-display text-sm font-medium">No games played yet</p>
             <p className="text-xs text-muted-foreground max-w-xs mx-auto">
               The leaderboard will populate once players start completing online
               games

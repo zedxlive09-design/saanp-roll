@@ -151,6 +151,13 @@
   [role="button"]:not([disabled]) {
     cursor: pointer;
   }
+  /* Respect mobile safe areas globally (Capacitor + PWA) */
+  #root {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
   /* Heritage display serif for headings */
   h1, h2, h3, .font-display {
     font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
@@ -169,5 +176,23 @@
   }
   .shadow-paper-lg {
     box-shadow: 0 2px 4px oklch(0.24 0.02 50 / 0.08), 0 12px 32px oklch(0.24 0.02 50 / 0.12);
+  }
+
+  /* Capacitor / mobile safe-area insets (notch, home indicator) */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  .safe-area {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 }

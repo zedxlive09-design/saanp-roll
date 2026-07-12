@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Wifi,
 } from "lucide-react";
+import { LandscapePrompt } from "@/components/game/LandscapePrompt";
 
 type LobbyPhase = "menu" | "creating" | "joining" | "waiting" | "starting";
 
@@ -46,6 +47,7 @@ export default function OnlineLobby() {
   const [copied, setCopied] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [joinName, setJoinName] = useState("");
+  const [lobbyMode, setLobbyMode] = useState<"friends" | "quickmatch">("friends");
 
   const { game, createGame, joinGame, startGame } = useGameRoom(
     phase === "waiting" || phase === "starting" ? createCode || joinCode : null,
@@ -125,6 +127,8 @@ export default function OnlineLobby() {
   const joinedCount = game?.players.filter((p) => p.userId).length ?? 0;
 
   return (
+    <>
+    <LandscapePrompt />
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -138,7 +142,7 @@ export default function OnlineLobby() {
           </Button>
           <div className="flex items-center gap-3">
             <LogoDropdown />
-            <h1 className="text-lg font-bold tracking-tight">
+            <h1 className="font-display text-lg font-bold tracking-tight">
               {phase === "waiting" ? "Game Lobby" : "Play Online"}
             </h1>
           </div>
@@ -163,9 +167,9 @@ export default function OnlineLobby() {
               {!activeGamesLoading &&
                 activeGames &&
                 activeGames.length > 0 && (
-                  <Card className="border-2 border-emerald-300/50 bg-gradient-to-r from-emerald-50/80 to-teal-50/80 dark:from-emerald-950/20 dark:to-teal-950/20 shadow-sm">
+                  <Card className="border-2 border-secondary/30 bg-gradient-to-r from-secondary/10 to-secondary/5 shadow-paper">
                     <CardContent className="p-4 space-y-3">
-                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <p className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5">
                         <RefreshCw className="h-3.5 w-3.5" />
                         Active Games
                       </p>
@@ -190,8 +194,8 @@ export default function OnlineLobby() {
                                 <Wifi
                                   className={`h-4 w-4 shrink-0 ${
                                     isPlaying
-                                      ? "text-emerald-500"
-                                      : "text-indigo-500"
+                                      ? "text-secondary"
+                                      : "text-primary"
                                   }`}
                                 />
                                 <div className="min-w-0">
@@ -236,11 +240,39 @@ export default function OnlineLobby() {
                   </Card>
                 )}
 
+              {/* Mode toggle */}
+              <div className="flex rounded-xl border border-border bg-card p-1 shadow-paper">
+                <button
+                  type="button"
+                  onClick={() => setLobbyMode("friends")}
+                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-display font-semibold transition-all ${
+                    lobbyMode === "friends"
+                      ? "bg-primary text-primary-foreground shadow-paper"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Play with Friends
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLobbyMode("quickmatch")}
+                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-display font-semibold transition-all ${
+                    lobbyMode === "quickmatch"
+                      ? "bg-primary text-primary-foreground shadow-paper"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Quick Match
+                </button>
+              </div>
+
+              {lobbyMode === "friends" && (
+                <>
               {/* Create Room */}
-              <Card className="border shadow-sm">
+              <Card className="border shadow-paper">
                 <CardContent className="p-5 space-y-4">
-                  <h2 className="font-semibold text-sm flex items-center gap-2">
-                    <Play className="h-4 w-4 text-indigo-500" />
+                  <h2 className="font-display font-semibold text-sm flex items-center gap-2">
+                    <Play className="h-4 w-4 text-primary" />
                     Create a Room
                   </h2>
 
@@ -258,18 +290,18 @@ export default function OnlineLobby() {
                             key={mode}
                             type="button"
                             onClick={() => setBoardMode(mode)}
-                            className={`flex flex-col items-center gap-1 rounded-xl border-2 p-3 transition-all cursor-pointer ${
+                            className={`flex flex-col items-center gap-1 rounded-xl border-2 p-3 transition-all hover:-translate-y-0.5 cursor-pointer ${
                               isSelected
                                 ? mode === "venom"
-                                  ? "border-red-500 bg-red-50 dark:bg-red-950/20"
-                                  : "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20"
+                                  ? "border-destructive bg-destructive/10"
+                                  : "border-primary bg-primary/10"
                                 : "border-border hover:border-muted-foreground/30"
                             }`}
                           >
                             {mode === "venom" ? (
-                              <Skull className="h-4 w-4 text-red-600" />
+                              <Skull className="h-4 w-4 text-destructive" />
                             ) : (
-                              <Play className="h-4 w-4 text-indigo-600" />
+                              <Play className="h-4 w-4 text-primary" />
                             )}
                             <span className="font-semibold text-xs">
                               {config.name}
@@ -291,9 +323,9 @@ export default function OnlineLobby() {
                           key={n}
                           type="button"
                           onClick={() => setPlayerCount(n)}
-                          className={`flex-1 rounded-lg border-2 py-2 text-sm font-medium transition-all cursor-pointer ${
+                          className={`flex-1 rounded-lg border-2 py-2 text-sm font-medium transition-all hover:-translate-y-0.5 cursor-pointer ${
                             playerCount === n
-                              ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400"
+                              ? "border-primary bg-primary/10 text-primary"
                               : "border-border hover:border-muted-foreground/30"
                           }`}
                         >
@@ -304,7 +336,7 @@ export default function OnlineLobby() {
                   </div>
 
                   <Button
-                    className="w-full"
+                    className="w-full shadow-paper-lg"
                     onClick={handleCreate}
                     disabled={isLoading}
                   >
@@ -330,10 +362,10 @@ export default function OnlineLobby() {
               </div>
 
               {/* Join Room */}
-              <Card className="border shadow-sm">
+              <Card className="border shadow-paper">
                 <CardContent className="p-5 space-y-4">
-                  <h2 className="font-semibold text-sm flex items-center gap-2">
-                    <LogIn className="h-4 w-4 text-emerald-500" />
+                  <h2 className="font-display font-semibold text-sm flex items-center gap-2">
+                    <LogIn className="h-4 w-4 text-secondary" />
                     Join a Room
                   </h2>
                   <div className="space-y-2">
@@ -368,6 +400,27 @@ export default function OnlineLobby() {
                   </Button>
                 </CardContent>
               </Card>
+                </>
+              )}
+
+              {lobbyMode === "quickmatch" && (
+                <Card className="border shadow-paper">
+                  <CardContent className="p-5 space-y-4 text-center">
+                    <h2 className="font-display font-semibold text-sm flex items-center justify-center gap-2">
+                      <Wifi className="h-4 w-4 text-secondary" />
+                      Quick Match
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Matchmaking with strangers coming soon. For now, create a
+                      private room and share the code.
+                    </p>
+                    <Button className="w-full" disabled>
+                      <Loader2 className="mr-2 h-4 w-4" />
+                      Find Match
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
             </motion.div>
           )}
 
@@ -380,13 +433,13 @@ export default function OnlineLobby() {
               className="space-y-4"
             >
               {/* Room Code */}
-              <Card className="border shadow-sm text-center">
+              <Card className="border shadow-paper text-center">
                 <CardContent className="p-6 space-y-3">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
                     Room Code
                   </p>
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-3xl font-mono font-bold tracking-[0.25em] text-indigo-600 dark:text-indigo-400">
+                    <span className="text-3xl font-mono font-bold tracking-[0.25em] text-primary">
                       {createCode || joinCode}
                     </span>
                     <Button
@@ -396,7 +449,7 @@ export default function OnlineLobby() {
                       className="h-9 w-9"
                     >
                       {copied ? (
-                        <Check className="h-4 w-4 text-emerald-500" />
+                        <Check className="h-4 w-4 text-secondary" />
                       ) : (
                         <Copy className="h-4 w-4" />
                       )}
@@ -409,7 +462,7 @@ export default function OnlineLobby() {
               </Card>
 
               {/* Players List */}
-              <Card className="border shadow-sm">
+              <Card className="border shadow-paper">
                 <CardContent className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -449,8 +502,8 @@ export default function OnlineLobby() {
                         <div className="flex items-center">
                           {player.userId ? (
                             player.isConnected ? (
-                              <span className="flex items-center gap-1 text-[11px] text-emerald-600">
-                                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                              <span className="flex items-center gap-1 text-[11px] text-secondary">
+                                <span className="h-2 w-2 rounded-full bg-secondary" />
                                 Ready
                               </span>
                             ) : (
@@ -474,7 +527,7 @@ export default function OnlineLobby() {
               {/* Start Button */}
               <Button
                 size="lg"
-                className="w-full h-14 text-lg font-semibold"
+                className="w-full h-14 text-lg font-semibold shadow-paper-lg"
                 onClick={handleStart}
                 disabled={
                   isLoading || joinedCount < 2 || !gameId
@@ -502,5 +555,6 @@ export default function OnlineLobby() {
         </AnimatePresence>
       </main>
     </motion.div>
+    </>
   );
 }

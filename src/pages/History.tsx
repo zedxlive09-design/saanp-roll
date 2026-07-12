@@ -52,14 +52,14 @@ export default function History() {
       className="min-h-screen bg-gradient-to-b from-background to-secondary/20"
     >
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
+      <header className="sticky top-0 z-10 border-b border-border/40 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
           <Button variant="ghost" size="icon" onClick={() => navigate("/home")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-3">
             <LogoDropdown />
-            <h1 className="text-lg font-bold tracking-tight">Match History</h1>
+            <h1 className="font-display text-lg font-bold tracking-tight">Match History</h1>
           </div>
         </div>
       </header>
@@ -67,19 +67,19 @@ export default function History() {
       {/* Main Content */}
       <main className="mx-auto max-w-2xl px-4 py-6 space-y-4">
         <p className="text-sm text-muted-foreground mb-2">
-          Your completed Saanp Roll matches
+          Your completed Saanp Seedhi matches
         </p>
 
         {!isAuthenticated && !authLoading && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-xl border border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950/20 p-6 text-center space-y-3"
+            className="rounded-xl border border-primary/30 bg-primary/10 p-6 text-center space-y-3 shadow-paper"
           >
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50">
-              <Users className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 ring-1 ring-primary/20">
+              <Users className="h-6 w-6 text-primary" />
             </div>
-            <p className="font-medium text-sm">
+            <p className="font-display font-medium text-sm">
               Sign in to track your match history
             </p>
             <p className="text-xs text-muted-foreground">
@@ -110,13 +110,13 @@ export default function History() {
                   icon: Dice1,
                   label: "Total Games",
                   value: String(totalGames),
-                  color: "#6366f1",
+                  tint: "secondary" as const,
                 },
                 {
                   icon: Trophy,
                   label: "Wins",
                   value: String(wins),
-                  color: "#eab308",
+                  tint: "primary" as const,
                 },
                 {
                   icon: Wifi,
@@ -125,25 +125,28 @@ export default function History() {
                     totalGames > 0
                       ? `${Math.round((wins / totalGames) * 100)}%`
                       : "—",
-                  color: "#14b8a6",
+                  tint: "secondary" as const,
                 },
               ].map((stat, i) => {
                 const Icon = stat.icon;
+                const tintClasses =
+                  stat.tint === "primary"
+                    ? "bg-primary/15 ring-primary/20 text-primary"
+                    : "bg-secondary/15 ring-secondary/20 text-secondary";
                 return (
                   <motion.div
                     key={stat.label}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.05 * i }}
-                    className="rounded-xl border bg-card p-3 text-center shadow-sm"
+                    className="rounded-xl border bg-card p-3 text-center shadow-paper"
                   >
                     <div
-                      className="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg"
-                      style={{ backgroundColor: `${stat.color}15` }}
+                      className={`mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg ring-1 ${tintClasses}`}
                     >
-                      <Icon className="h-4 w-4" style={{ color: stat.color }} />
+                      <Icon className="h-4 w-4" />
                     </div>
-                    <p className="text-lg font-bold">{stat.value}</p>
+                    <p className="text-lg font-bold font-display">{stat.value}</p>
                     <p className="text-[11px] text-muted-foreground">
                       {stat.label}
                     </p>
@@ -169,10 +172,10 @@ export default function History() {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.06 * i }}
                     >
-                      <Card className="border shadow-sm hover:shadow-md transition-all group">
+                      <Card className="border shadow-paper hover:shadow-paper-lg hover:-translate-y-0.5 transition-all group">
                         <CardContent className="flex items-center gap-3 p-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-900/40 shrink-0 transition-transform group-hover:scale-105">
-                            <ScrollText className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 ring-1 ring-primary/20 shrink-0 transition-transform group-hover:scale-105">
+                            <ScrollText className="h-5 w-5 text-primary" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
@@ -218,7 +221,7 @@ export default function History() {
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                   <Frown className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <p className="text-sm font-medium">No matches yet</p>
+                <p className="font-display text-sm font-medium">No matches yet</p>
                 <p className="text-xs text-muted-foreground max-w-xs mx-auto">
                   Play an online game and your completed matches will show up
                   here

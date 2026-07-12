@@ -16,6 +16,7 @@ import {
 import type { BoardMode, GameState } from "@/lib/game-engine";
 import { soundManager } from "@/lib/sounds";
 import { ArrowLeft, RefreshCw, ScrollText } from "lucide-react";
+import { LandscapePrompt } from "@/components/game/LandscapePrompt";
 
 interface LocationState {
   boardMode: BoardMode;
@@ -233,6 +234,8 @@ function GamePlayInner({
   }, [gameState.moveLog.length]);
 
   return (
+    <>
+    <LandscapePrompt />
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -249,7 +252,7 @@ function GamePlayInner({
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-base font-bold tracking-tight">
+              <h1 className="font-display text-base font-bold tracking-tight">
                 {BOARD_CONFIGS[boardMode].name}
               </h1>
               <p className="text-[11px] text-muted-foreground">
@@ -289,7 +292,7 @@ function GamePlayInner({
               initial={{ opacity: 0, y: -20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20 }}
-              className="rounded-2xl border-2 border-emerald-400 bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950/30 dark:to-emerald-900/20 p-6 text-center shadow-lg"
+              className="rounded-2xl border-2 border-primary/50 bg-gradient-to-br from-primary/10 via-primary/5 to-card p-6 text-center shadow-paper-lg"
             >
               <motion.div
                 initial={{ scale: 0 }}
@@ -299,17 +302,17 @@ function GamePlayInner({
               >
                 🏆
               </motion.div>
-              <h2 className="text-2xl font-bold text-emerald-800 dark:text-emerald-300">
+              <h2 className="font-display text-2xl font-bold text-primary">
                 {winner.name} Wins!
               </h2>
-              <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 Reached tile 100 in {gameState.moveLog.length} moves
               </p>
               <div className="flex items-center justify-center gap-3 mt-4">
                 <Button
                   variant="default"
                   onClick={handleRematch}
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  className="bg-primary hover:bg-primary/90"
                 >
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Rematch
@@ -354,7 +357,7 @@ function GamePlayInner({
                     {isExtraRoll && (
                       <Badge
                         variant="secondary"
-                        className="ml-2 text-[10px] bg-amber-100 text-amber-700"
+                        className="ml-2 text-[10px] bg-primary/15 text-primary"
                       >
                         Extra Roll
                       </Badge>
@@ -478,5 +481,6 @@ function GamePlayInner({
         )}
       </main>
     </motion.div>
+    </>
   );
 }

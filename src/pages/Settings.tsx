@@ -26,27 +26,34 @@ const soonSections = [
     icon: Bell,
     label: "Notifications",
     description: "Game invites and activity alerts",
-    color: "#eab308",
+    tint: "primary" as const,
   },
   {
     icon: Eye,
     label: "Accessibility",
     description: "Motion reduction, contrast, and font size",
-    color: "#14b8a6",
+    tint: "secondary" as const,
   },
   {
     icon: Shield,
     label: "Privacy & Security",
     description: "Account data and session management",
-    color: "#8b5cf6",
+    tint: "destructive" as const,
   },
   {
     icon: Info,
     label: "About",
     description: "Version, licenses, and credits",
-    color: "#6b7280",
+    tint: "muted" as const,
   },
 ];
+
+const tintClasses: Record<string, string> = {
+  primary: "bg-primary/15 ring-primary/20 text-primary",
+  secondary: "bg-secondary/15 ring-secondary/20 text-secondary",
+  destructive: "bg-destructive/15 ring-destructive/20 text-destructive",
+  muted: "bg-muted text-muted-foreground ring-border",
+};
 
 const themeOptions = [
   { key: "light", icon: Sun, label: "Light" },
@@ -67,14 +74,14 @@ export default function Settings() {
       className="min-h-screen bg-gradient-to-b from-background to-secondary/20"
     >
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
+      <header className="sticky top-0 z-10 border-b border-border/40 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
           <Button variant="ghost" size="icon" onClick={() => navigate("/home")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-3">
             <LogoDropdown />
-            <h1 className="text-lg font-bold tracking-tight">Settings</h1>
+            <h1 className="font-display text-lg font-bold tracking-tight">Settings</h1>
           </div>
         </div>
       </header>
@@ -82,7 +89,7 @@ export default function Settings() {
       {/* Main Content */}
       <main className="mx-auto max-w-2xl px-4 py-6 space-y-4">
         <p className="text-sm text-muted-foreground mb-2">
-          Customize your Saanp Roll experience
+          Customize your Saanp Seedhi experience
         </p>
 
         <div className="space-y-3">
@@ -92,24 +99,21 @@ export default function Settings() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0 }}
           >
-            <Card className="border shadow-sm">
+            <Card className="border shadow-paper">
               <CardContent className="p-5 space-y-4">
                 {/* Header row */}
                 <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-11 w-11 items-center justify-center rounded-xl shrink-0"
-                    style={{ backgroundColor: "#6366f115" }}
-                  >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl shrink-0 bg-primary/15 ring-1 ring-primary/20">
                     {theme === "dark" ? (
-                      <Moon className="h-5 w-5" style={{ color: "#6366f1" }} />
+                      <Moon className="h-5 w-5 text-primary" />
                     ) : theme === "light" ? (
-                      <Sun className="h-5 w-5" style={{ color: "#6366f1" }} />
+                      <Sun className="h-5 w-5 text-primary" />
                     ) : (
-                      <Monitor className="h-5 w-5" style={{ color: "#6366f1" }} />
+                      <Monitor className="h-5 w-5 text-primary" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm">Appearance</p>
+                    <p className="font-display font-medium text-sm">Appearance</p>
                     <p className="text-xs text-muted-foreground">
                       Theme, colors, and display preferences
                     </p>
@@ -128,21 +132,21 @@ export default function Settings() {
                         onClick={() => setTheme(opt.key)}
                         className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 transition-all cursor-pointer ${
                           isActive
-                            ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 shadow-sm"
+                            ? "border-primary bg-primary/10 shadow-paper"
                             : "border-border hover:border-muted-foreground/40 hover:bg-accent/30"
                         }`}
                       >
                         <Icon
                           className={`h-5 w-5 ${
                             isActive
-                              ? "text-indigo-600 dark:text-indigo-400"
+                              ? "text-primary"
                               : "text-muted-foreground"
                           }`}
                         />
                         <span
                           className={`text-[11px] font-medium ${
                             isActive
-                              ? "text-indigo-600 dark:text-indigo-400"
+                              ? "text-primary"
                               : "text-muted-foreground"
                           }`}
                         >
@@ -162,22 +166,19 @@ export default function Settings() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
           >
-            <Card className="border shadow-sm">
+            <Card className="border shadow-paper">
               <CardContent className="p-5 space-y-4">
                 {/* Header row */}
                 <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-11 w-11 items-center justify-center rounded-xl shrink-0"
-                    style={{ backgroundColor: "#ec489915" }}
-                  >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl shrink-0 bg-secondary/15 ring-1 ring-secondary/20">
                     {soundEnabled ? (
-                      <Volume2 className="h-5 w-5" style={{ color: "#ec4899" }} />
+                      <Volume2 className="h-5 w-5 text-secondary" />
                     ) : (
-                      <VolumeX className="h-5 w-5" style={{ color: "#ec4899" }} />
+                      <VolumeX className="h-5 w-5 text-secondary" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm">Sound & Effects</p>
+                    <p className="font-display font-medium text-sm">Sound & Effects</p>
                     <p className="text-xs text-muted-foreground">
                       Dice sounds, music, and effects
                     </p>
@@ -240,16 +241,12 @@ export default function Settings() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.05 * (i + 1) }}
               >
-                <Card className="border shadow-sm hover:shadow-md transition-all cursor-pointer group">
+                <Card className="border shadow-paper hover:shadow-paper-lg hover:-translate-y-0.5 transition-all cursor-pointer group">
                   <CardContent className="flex items-center gap-4 p-4">
                     <div
-                      className="flex h-11 w-11 items-center justify-center rounded-xl shrink-0 transition-transform group-hover:scale-105"
-                      style={{ backgroundColor: `${section.color}15` }}
+                      className={`flex h-11 w-11 items-center justify-center rounded-xl shrink-0 transition-transform group-hover:scale-105 ring-1 ${tintClasses[section.tint]}`}
                     >
-                      <Icon
-                        className="h-5 w-5"
-                        style={{ color: section.color }}
-                      />
+                      <Icon className="h-5 w-5" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm">{section.label}</p>

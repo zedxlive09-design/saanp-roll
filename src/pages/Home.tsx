@@ -18,36 +18,40 @@ import {
   WifiOff,
 } from "lucide-react";
 import { LogoDropdown } from "@/components/LogoDropdown";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { useAuth } from "@/hooks/use-auth";
 
 function StatCard({
   icon: Icon,
   label,
   value,
-  color,
+  tint,
   isLoading: statLoading,
 }: {
   icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   label: string;
   value: string;
-  color: string;
+  tint: "primary" | "secondary";
   isLoading?: boolean;
 }) {
+  const tintClasses =
+    tint === "primary"
+      ? "bg-primary/15 ring-primary/20 text-primary"
+      : "bg-secondary/15 ring-secondary/20 text-secondary";
   return (
-    <Card className="border shadow-sm">
+    <Card className="border shadow-paper">
       <CardContent className="flex items-center gap-3 p-4">
         <div
-          className="flex h-10 w-10 items-center justify-center rounded-lg shrink-0"
-          style={{ backgroundColor: `${color}15` }}
+          className={`flex h-10 w-10 items-center justify-center rounded-lg shrink-0 ring-1 ${tintClasses}`}
         >
-          <Icon className="h-5 w-5" style={{ color }} />
+          <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">{label}</p>
           {statLoading ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mt-0.5" />
           ) : (
-            <p className="text-lg font-bold">{value}</p>
+            <p className="text-lg font-bold font-display">{value}</p>
           )}
         </div>
       </CardContent>
@@ -76,13 +80,14 @@ export default function Home() {
       animate={{ opacity: 1 }}
       className="min-h-screen bg-gradient-to-b from-background to-secondary/20"
     >
+      <OfflineBanner />
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
+      <header className="sticky top-0 z-10 border-b border-border/40 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <LogoDropdown />
             <div>
-              <h1 className="text-lg font-bold tracking-tight">Saanp Roll</h1>
+              <h1 className="font-display text-lg font-bold tracking-tight">Saanp Seedhi</h1>
               <p className="text-xs text-muted-foreground">Snakes & Ladders</p>
             </div>
           </div>
@@ -104,14 +109,14 @@ export default function Home() {
             icon={Trophy}
             label="Games Won"
             value={String(gamesWon)}
-            color="#eab308"
+            tint="primary"
             isLoading={statsLoading}
           />
           <StatCard
             icon={Dice1}
             label="Games Played"
             value={String(gamesPlayed)}
-            color="#6366f1"
+            tint="secondary"
             isLoading={statsLoading}
           />
         </div>
@@ -136,24 +141,24 @@ export default function Home() {
               return (
                 <Card
                   key={g._id}
-                  className={`border-2 shadow-sm overflow-hidden ${
+                  className={`border-2 shadow-paper overflow-hidden transition-all hover:shadow-paper-lg ${
                     isPlaying
-                      ? "border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/10"
-                      : "border-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/10"
+                      ? "border-secondary/40 bg-secondary/10"
+                      : "border-primary/40 bg-primary/10"
                   }`}
                 >
                   <CardContent className="p-4 flex items-center gap-3">
                     <div
-                      className={`flex h-12 w-12 items-center justify-center rounded-xl shrink-0 ${
+                      className={`flex h-12 w-12 items-center justify-center rounded-xl shrink-0 ring-1 ${
                         isPlaying
-                          ? "bg-emerald-100 dark:bg-emerald-900/40"
-                          : "bg-indigo-100 dark:bg-indigo-900/40"
+                          ? "bg-secondary/15 ring-secondary/20"
+                          : "bg-primary/15 ring-primary/20"
                       }`}
                     >
                       {isPlaying ? (
-                        <Wifi className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                        <Wifi className="h-6 w-6 text-secondary" />
                       ) : (
-                        <Users className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                        <Users className="h-6 w-6 text-primary" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -174,7 +179,7 @@ export default function Home() {
                         {boardName} · {playerCount} player
                         {playerCount !== 1 ? "s" : ""}
                         {isDisconnected && (
-                          <span className="ml-2 text-amber-600 dark:text-amber-400 font-medium">
+                          <span className="ml-2 text-destructive font-medium">
                             · Disconnected
                           </span>
                         )}
@@ -215,15 +220,15 @@ export default function Home() {
           <Button
             variant="outline"
             size="lg"
-            className="w-full h-24 flex items-center justify-between px-6 text-left border-2 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-all"
+            className="w-full h-24 flex items-center justify-between px-6 text-left border-2 hover:border-primary/40 hover:bg-primary/10 hover:-translate-y-0.5 hover:shadow-paper-lg transition-all"
             onClick={() => navigate("/game/setup")}
           >
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-900/50">
-                <Users className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 ring-1 ring-primary/20">
+                <Users className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="text-base font-semibold">Play Local</p>
+                <p className="text-base font-semibold font-display">Play Local</p>
                 <p className="text-sm text-muted-foreground">
                   Pass & play with friends
                 </p>
@@ -242,15 +247,15 @@ export default function Home() {
           <Button
             variant="outline"
             size="lg"
-            className="w-full h-24 flex items-center justify-between px-6 text-left border-2 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
+            className="w-full h-24 flex items-center justify-between px-6 text-left border-2 hover:border-secondary/40 hover:bg-secondary/10 hover:-translate-y-0.5 hover:shadow-paper-lg transition-all"
             onClick={() => navigate("/lobby")}
           >
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/50">
-                <Wifi className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary/15 ring-1 ring-secondary/20">
+                <Wifi className="h-6 w-6 text-secondary" />
               </div>
               <div>
-                <p className="text-base font-semibold">Play Online</p>
+                <p className="text-base font-semibold font-display">Play Online</p>
                 <p className="text-sm text-muted-foreground">
                   Create or join a room — real-time multiplayer
                 </p>
@@ -264,7 +269,7 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-3">
           <Button
             variant="outline"
-            className="h-20 flex-col gap-1"
+            className="h-20 flex-col gap-1 hover:-translate-y-0.5 hover:shadow-paper-lg transition-all"
             onClick={() => navigate("/history")}
           >
             <ScrollText className="h-5 w-5" />
@@ -272,7 +277,7 @@ export default function Home() {
           </Button>
           <Button
             variant="outline"
-            className="h-20 flex-col gap-1"
+            className="h-20 flex-col gap-1 hover:-translate-y-0.5 hover:shadow-paper-lg transition-all"
             onClick={() => navigate("/leaderboard")}
           >
             <Swords className="h-5 w-5" />

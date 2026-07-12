@@ -25,7 +25,6 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { LandscapePrompt } from "@/components/game/LandscapePrompt";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -165,8 +164,10 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   useEffect(() => {
     if (!game || game.status !== "playing" || timeLeft > 0) return;
 
-    // Create a unique key for this turn to prevent double-skips
-    const turnKey = `${game.currentPlayerIndex}-${game.turnStartedAt}`;
+    // Create a unique key for this turn to prevent double-skips.
+    // Use game._id + currentPlayerIndex + turnStartedAt — all three identify
+    // a unique turn. Once skipped, we never skip the same turn again.
+    const turnKey = `${game._id}-${game.currentPlayerIndex}-${game.turnStartedAt}`;
     if (skippedRef.current === turnKey) return;
     skippedRef.current = turnKey;
 
@@ -178,11 +179,12 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
           duration: 2000,
         });
       } catch (err) {
-        // Ignore skip errors (might have been skipped already)
+        // Ignore skip errors (might have been skipped already, or auth issue)
       }
     };
     doSkip();
-  }, [timeLeft, game, skipTurn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft, game?._id, game?.status, game?.currentPlayerIndex, game?.turnStartedAt]);
 
   // === Derivations (null-safe, before early returns so hooks see them) ===
   const boardMode = (game?.boardId ?? "classic") as "classic" | "venom";
@@ -201,13 +203,15 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
     game && game.moveLog.length > 0
       ? Math.ceil(game.moveLog.length / game.players.length)
       : 1;
-  const displayPlayers = (game?.players ?? []).map((p) => ({
+  const displayPlayers = (game?.players ?? []).map((p, idx) => ({
     id: p.userId,
     name: p.name,
     color: p.color,
+    // Use the player INDEX as the animation key — only the current player
+    // gets animated, preventing both pieces from moving simultaneously.
     position:
-      animatedPositions[p.userId] !== undefined
-        ? animatedPositions[p.userId]
+      animatedPositions[idx] !== undefined
+        ? animatedPositions[idx]
         : p.position,
     consecutiveSixes: p.consecutiveSixes,
     isBot: p.isBot === true,
@@ -265,11 +269,12 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
 
       if (tilesToStep > 0 && !didOvershoot) {
         let step = 1;
+        const currentPlayerIndex = game!.currentPlayerIndex;
         const stepInterval = setInterval(() => {
           const steppedPos = fromPos + step;
           setAnimatedPositions((prev) => ({
             ...prev,
-            [player.userId]: steppedPos,
+            [currentPlayerIndex]: steppedPos,
           }));
           soundManager.play("tile_step");
           step++;
@@ -447,7 +452,6 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
 
   return (
     <>
-      <LandscapePrompt />
       <div
         className="fixed inset-0 overflow-hidden"
         style={{

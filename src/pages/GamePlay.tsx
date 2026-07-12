@@ -17,7 +17,6 @@ import {
 import type { BoardMode, GameState, PlayerSetup } from "@/lib/game-engine";
 import { soundManager } from "@/lib/sounds";
 import { Cpu, Crown, LogOut, RefreshCw, ScrollText, Trophy, X } from "lucide-react";
-import { LandscapePrompt } from "@/components/game/LandscapePrompt";
 import { useDeviceSpec } from "@/hooks/use-device-spec";
 import { haptics } from "@/lib/haptics";
 
@@ -300,7 +299,6 @@ function GamePlayInner({
 
   return (
     <>
-      <LandscapePrompt />
       <div
         className="fixed inset-0 overflow-hidden"
         style={{

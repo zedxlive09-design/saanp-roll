@@ -160,8 +160,6 @@ export function Board({ boardId, players, highlightedTile, className }: BoardPro
         {TILES.map((tile) => {
           const tileColor = getTileColor(tile.number, boardId);
           const isHighlighted = highlightedTile === tile.number;
-          const hasSnake = config.snakes[tile.number] !== undefined;
-          const hasLadder = config.ladders[tile.number] !== undefined;
           const isWinTile = tile.number === 100;
           return (
             <g key={tile.number}>
@@ -194,15 +192,9 @@ export function Board({ boardId, players, highlightedTile, className }: BoardPro
                 {tile.number}
               </text>
 
-              {isWinTile && (
-                <text x={tile.x + TILE_SIZE / 2} y={tile.y + TILE_SIZE - 16} textAnchor="middle" fontSize={28}>👑</text>
-              )}
-              {hasSnake && (
-                <text x={tile.x + TILE_SIZE - 10} y={tile.y + TILE_SIZE - 9} textAnchor="end" fontSize={16}>🐍</text>
-              )}
-              {hasLadder && (
-                <text x={tile.x + TILE_SIZE - 10} y={tile.y + TILE_SIZE - 9} textAnchor="end" fontSize={16}>🪜</text>
-              )}
+              {/* Win-tile crown / snake / ladder emoji labels removed:
+                  the gold-leaf tile-100 styling, 3D snake paths, and 3D
+                  ladder rungs already convey the meaning visually. */}
             </g>
           );
         })}

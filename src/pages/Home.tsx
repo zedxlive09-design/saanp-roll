@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   Swords,
@@ -15,7 +15,10 @@ import {
   User as UserIcon,
   ChevronRight,
   LogIn,
+  Coins,
+  Gift,
 } from "lucide-react";
+import { toast } from "sonner";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -30,11 +33,28 @@ export default function Home() {
 
   const userStats = useQuery(api.games.getUserStats);
   const activeGames = useQuery(api.games.getUserActiveGames);
+  const coinsBalance = useQuery(api.coins.getMyCoins);
+  const bonusStatus = useQuery(api.coins.getDailyBonusStatus);
+  const claimDailyBonus = useMutation(api.coins.claimDailyBonus);
   const statsLoading = userStats === undefined;
   const activeGamesLoading = activeGames === undefined;
 
   const gamesWon = userStats?.wins ?? 0;
   const gamesPlayed = userStats?.totalGames ?? 0;
+  const coins = coinsBalance ?? 0;
+  const coinsLoading = coinsBalance === undefined;
+  const bonusAvailable = !!bonusStatus?.available;
+
+  const handleClaimBonus = async () => {
+    try {
+      const result = await claimDailyBonus({});
+      toast.success(`+${result.awarded} coins — Daily bonus claimed!`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to claim bonus",
+      );
+    }
+  };
 
   // Games the user can reconnect to — query already filtered to user's games
   const reconnectGames = activeGames ?? [];
@@ -122,6 +142,71 @@ export default function Home() {
                 </span>
               </div>
             </div>
+          </div>
+        </motion.div>
+
+        {/* === Wallet bar: coins balance + daily bonus === */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
+          className="mx-auto mt-3 max-w-2xl px-4"
+        >
+          <div className="flex items-center gap-2 rounded-2xl border border-primary/30 bg-black/30 p-2.5 backdrop-blur-md">
+            {/* Coins balance (gold pill) */}
+            <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/40">
+                <Coins className="size-4 text-primary" />
+              </span>
+              <div className="min-w-0 flex-1">
+                {isAuthenticated ? (
+                  <>
+                    {coinsLoading ? (
+                      <Loader2 className="size-4 animate-spin text-primary" />
+                    ) : (
+                      <p className="font-display text-lg font-bold leading-none text-primary">
+                        {coins.toLocaleString()}
+                      </p>
+                    )}
+                    <p className="mt-0.5 text-[10px] uppercase tracking-wide text-white/55">
+                      Coins
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs font-semibold leading-tight text-white/85">
+                      Sign in to earn coins
+                    </p>
+                    <button
+                      onClick={() => navigate("/auth")}
+                      className="text-[10px] font-medium text-primary hover:underline"
+                    >
+                      Tap here to sign in
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Daily bonus button (only if authenticated + available) */}
+            {isAuthenticated && bonusAvailable && (
+              <motion.button
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleClaimBonus}
+                className="flex shrink-0 items-center gap-2 rounded-xl border border-secondary/40 bg-secondary/15 px-3.5 py-2.5 backdrop-blur-md transition-colors hover:bg-secondary/25"
+              >
+                <Gift className="size-4 text-secondary" />
+                <div className="text-left">
+                  <p className="font-display text-xs font-bold leading-none text-secondary">
+                    Daily Bonus
+                  </p>
+                  <p className="mt-0.5 text-[10px] font-medium text-secondary/80">
+                    +100 coins
+                  </p>
+                </div>
+              </motion.button>
+            )}
           </div>
         </motion.div>
 

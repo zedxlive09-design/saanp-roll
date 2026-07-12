@@ -1,14 +1,7 @@
-import {
-  useState,
-  useRef,
-  forwardRef,
-  useImperativeHandle,
-  useCallback,
-} from "react";
+import { useState, useRef, forwardRef, useImperativeHandle, useCallback } from "react";
 import { soundManager } from "@/lib/sounds";
 import { haptics } from "@/lib/haptics";
 
-// Pip positions on a 3x3 grid for each face value
 const PIPS: Record<number, [number, number][]> = {
   1: [[1, 1]],
   2: [[0, 0], [2, 2]],
@@ -18,7 +11,6 @@ const PIPS: Record<number, [number, number][]> = {
   6: [[0, 0], [0, 2], [1, 0], [1, 2], [2, 0], [2, 2]],
 };
 
-// Rotation to show each face on the front
 const FACE_ROTATION: Record<number, string> = {
   1: "rotateX(0deg) rotateY(0deg)",
   2: "rotateY(-90deg)",
@@ -28,21 +20,16 @@ const FACE_ROTATION: Record<number, string> = {
   6: "rotateY(180deg)",
 };
 
+export interface DiceRollHandle {
+  roll: () => void;
+}
+
 interface DiceRollProps {
   onRoll: (value: number) => void;
   disabled?: boolean;
   currentPlayerColor?: string;
   isExtraRoll?: boolean;
   serverRoll?: () => Promise<number>;
-}
-
-/**
- * Imperative handle exposed by <DiceRoll ref={...} />.
- * Lets a parent (e.g. the bot auto-roll effect) trigger the same tumble
- * animation + sound + onRoll callback as a human tap.
- */
-export interface DiceRollHandle {
-  roll: () => void;
 }
 
 function Face({ value }: { value: number }) {
@@ -68,121 +55,107 @@ function Face({ value }: { value: number }) {
   );
 }
 
-export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceRoll({
-  onRoll,
-  disabled = false,
-  currentPlayerColor = "#d97706",
-  isExtraRoll = false,
-  serverRoll,
-}, ref) {
+export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceRoll(
+  { onRoll, disabled = false, currentPlayerColor = "#d97706", isExtraRoll = false, serverRoll },
+  ref,
+) {
   const [rolling, setRolling] = useState(false);
-  // Synchronous mirror of `rolling` so rapid taps (faster than one render
-  // frame) can't slip past the guard and trigger a double-roll — important
-  // for online mode where each roll is a server mutation.
-  const rollingRef = useRef(false);
   const [rotation, setRotation] = useState<string>("rotateX(0deg) rotateY(0deg)");
-  const [pos, setPos] = useState({ x: 0, y: 0, scale: 1 });
-  const [showGlow, setShowGlow] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0, scale: 1, opacity: 1 });
+  const [showGlow, setShowGlow] = useState(true);
+  const [idlePos, setIdlePos] = useState({ x: 0, y: 0 });
+  const rollingRef = useRef(false);
   const animRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
 
-  // Keep a ref to the latest onRoll so the imperative handle is stable
-  // but always invokes the freshest callback closure.
-  const onRollRef = useRef(onRoll);
-  onRollRef.current = onRoll;
+  useImperativeHandle(ref, () => ({
+    roll: () => handleRoll({ force: true }),
+  }));
 
-  const handleRoll = useCallback(async (opts?: { force?: boolean }) => {
-    // `force` is used by the imperative handle (bot auto-roll) so a bot can
-    // trigger a roll even when the dice button is rendered disabled (because
-    // it's the bot's turn, not a human's). The `rolling` guard still applies.
-    // Use a synchronous ref so rapid taps can't slip past between the state
-    // check and setState committing.
-    if (rollingRef.current) return;
-    if (!opts?.force && disabled) return;
-    rollingRef.current = true;
-    setRolling(true);
-    setShowGlow(false);
-    haptics.roll();
-    soundManager.play("dice_roll");
+  const handleRoll = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (rollingRef.current) return;
+      if (!opts?.force && disabled) return;
 
-    // Determine final value
-    const value = serverRoll ? await serverRoll() : Math.floor(Math.random() * 6) + 1;
+      rollingRef.current = true;
+      setRolling(true);
+      setShowGlow(false);
+      haptics.roll();
+      soundManager.play("dice_roll");
 
-    // Realistic tumble: dice travels across the board in a bouncing arc,
-    // spinning rapidly, then settles on the final face.
-    // Trajectory: start offset, bounce 3 times, land center.
-    const duration = 1100; // ms
-    const startTime = performance.now();
-    const startX = -120 - Math.random() * 40;
-    const startY = -60 + Math.random() * 120;
-    const bounces = 3;
+      const value = serverRoll ? await serverRoll() : Math.floor(Math.random() * 6) + 1;
 
-    // Pre-generate random spin amounts (full rotations per axis)
-    const spinX = (3 + Math.floor(Math.random() * 3)) * 360;
-    const spinY = (3 + Math.floor(Math.random() * 3)) * 360;
+      // Real-life throw: dice starts OFF-BOARD from a random edge (left or right),
+      // tumbles across the board with bouncing arcs, and settles at a random
+      // landing spot near center.
+      const fromLeft = Math.random() > 0.5;
+      const startX = fromLeft ? -180 - Math.random() * 60 : 180 + Math.random() * 60;
+      const startY = -40 + Math.random() * 120;
+      // Landing spot: somewhere near center but not exactly center
+      const landX = -30 + Math.random() * 60;
+      const landY = -20 + Math.random() * 50;
 
-    const finalRot = FACE_ROTATION[value];
+      const duration = 1200;
+      const startTime = performance.now();
+      const bounces = 3;
+      const spinX = (4 + Math.floor(Math.random() * 3)) * 360;
+      const spinY = (4 + Math.floor(Math.random() * 3)) * 360;
+      const finalRot = FACE_ROTATION[value];
 
-    function animate(now: number) {
-      const elapsed = now - startTime;
-      const t = Math.min(elapsed / duration, 1);
+      function animate(now: number) {
+        const elapsed = now - startTime;
+        const t = Math.min(elapsed / duration, 1);
 
-      // Position: ease-out horizontal, bounce vertical
-      const easeT = 1 - Math.pow(1 - t, 3); // easeOutCubic
-      const x = startX * (1 - easeT);
-      // Bouncing arc: parabola per bounce segment
-      const bouncePhase = (t * bounces) % 1;
-      const bounceHeight = 30 * (1 - t * 0.6); // bounce height decreases
-      const y = startY * (1 - easeT) - Math.sin(bouncePhase * Math.PI) * bounceHeight;
+        // Position: ease-out from edge to landing spot
+        const easeT = 1 - Math.pow(1 - t, 2.5);
+        const x = startX + (landX - startX) * easeT;
+        const baseY = startY + (landY - startY) * easeT;
+        // Bouncing arc on top of the path
+        const bouncePhase = (t * bounces) % 1;
+        const bounceHeight = 40 * (1 - t * 0.7);
+        const y = baseY - Math.sin(bouncePhase * Math.PI) * bounceHeight;
 
-      // Scale: slightly larger mid-flight, settle to 1
-      const scale = 1 + Math.sin(t * Math.PI) * 0.15;
+        // Scale: slightly larger mid-flight, settle to 1
+        const scale = 1 + Math.sin(t * Math.PI) * 0.2;
 
-      // Rotation: rapid spin, decelerating, land on final face
-      let rot;
-      if (t < 0.85) {
-        const spinT = t / 0.85;
-        const rx = spinX * spinT;
-        const ry = spinY * spinT;
-        rot = `rotateX(${rx}deg) rotateY(${ry}deg)`;
-      } else {
-        // Final settle: blend from last spin to final face
-        const settleT = (t - 0.85) / 0.15;
-        const settleEase = 1 - Math.pow(1 - settleT, 3);
-        rot = finalRot;
+        // Rotation: rapid spin, decelerating, land on final face
+        let rot;
+        if (t < 0.85) {
+          const spinT = t / 0.85;
+          const decel = 1 - Math.pow(1 - spinT, 2);
+          rot = `rotateX(${spinX * decel}deg) rotateY(${spinY * decel}deg)`;
+        } else {
+          rot = finalRot;
+        }
+
+        setPos({ x, y, scale, opacity: 1 });
+
+        if (t < 1) {
+          animRef.current = requestAnimationFrame(animate);
+        } else {
+          // Landed — store the landing position as the new idle position
+          setPos({ x: landX, y: landY, scale: 1, opacity: 1 });
+          setIdlePos({ x: landX, y: landY });
+          setRotation(finalRot);
+          haptics.tap();
+          setTimeout(() => {
+            setRolling(false);
+            setShowGlow(true);
+            onRoll(value);
+          }, 250);
+        }
       }
 
-      setPos({ x, y, scale });
-      setRotation(rot);
-
-      if (t < 1) {
+      // Start the dice invisible at the edge, then begin
+      setPos({ x: startX, y: startY, scale: 0.8, opacity: 0 });
+      setTimeout(() => {
+        setPos({ x: startX, y: startY, scale: 0.8, opacity: 1 });
         animRef.current = requestAnimationFrame(animate);
-      } else {
-        // Landed
-        setPos({ x: 0, y: 0, scale: 1 });
-        setRotation(finalRot);
-        haptics.tap();
-        setTimeout(() => {
-          rollingRef.current = false;
-          setRolling(false);
-          setShowGlow(true);
-          onRollRef.current(value);
-        }, 200);
-      }
-    }
-    animRef.current = requestAnimationFrame(animate);
-  }, [disabled, rolling, serverRoll]);
-
-  // Expose a stable imperative roll() so bots can trigger the same tumble
-  // animation + sound + onRoll flow as a human tap.
-  useImperativeHandle(
-    ref,
-    () => ({
-      roll: () => {
-        void handleRoll({ force: true });
-      },
-    }),
-    [handleRoll],
+      }, 50);
+    },
+    [disabled, serverRoll, onRoll],
   );
+
+  const currentPos = rolling ? pos : { x: idlePos.x, y: idlePos.y, scale: 1, opacity: 1 };
 
   return (
     <div className="pointer-events-auto flex flex-col items-center gap-2">
@@ -191,49 +164,51 @@ export const DiceRoll = forwardRef<DiceRollHandle, DiceRollProps>(function DiceR
         disabled={disabled || rolling}
         className="relative cursor-pointer select-none"
         style={{
-          width: 56,
-          height: 56,
-          perspective: 500,
+          width: 200,
+          height: 200,
+          perspective: 600,
           opacity: disabled ? 0.4 : 1,
+          background: "transparent",
+          border: "none",
         }}
         aria-label="Roll dice"
       >
-        {/* Contact shadow that follows the dice (bounces with it) */}
+        {/* Contact shadow that follows the dice */}
         <div
           className="absolute left-1/2 top-1/2 rounded-full bg-black/50"
           style={{
             width: 40,
             height: 10,
-            filter: "blur(3px)",
-            transform: `translate(calc(-50% + ${pos.x * 0.3}px), calc(-50% + 28px)) scale(${pos.scale * (1 - Math.abs(pos.y) / 80)})`,
-            opacity: 0.4 + pos.scale * 0.2,
+            filter: "blur(4px)",
+            transform: `translate(calc(-50% + ${currentPos.x * 0.3}px), calc(-50% + 30px)) scale(${currentPos.scale * (1 - Math.abs(currentPos.y) / 100)})`,
+            opacity: 0.3 + currentPos.scale * 0.2,
           }}
         />
         {/* Idle glow when ready to roll */}
         {!rolling && !disabled && showGlow && (
           <div
-            className="absolute -inset-2 rounded-full animate-pulse"
-            style={{ boxShadow: `0 0 16px 3px ${currentPlayerColor}80` }}
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full animate-pulse"
+            style={{ width: 80, height: 80, boxShadow: `0 0 20px 4px ${currentPlayerColor}80` }}
           />
         )}
-        {/* The 3D cube — travels and tumbles */}
+        {/* The 3D cube — throws from edge, tumbles across, settles */}
         <div
           className="absolute left-1/2 top-1/2"
           style={{
-            width: 40,
-            height: 40,
+            width: 44,
+            height: 44,
             transformStyle: "preserve-3d",
-            transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px)) scale(${pos.scale}) ${rotation}`,
-            transition: rolling ? "none" : "transform 0.3s ease",
+            transform: `translate(calc(-50% + ${currentPos.x}px), calc(-50% + ${currentPos.y}px)) scale(${currentPos.scale}) ${rotation}`,
+            opacity: currentPos.opacity,
+            transition: rolling ? "none" : "transform 0.3s ease, opacity 0.2s ease",
           }}
         >
-          {/* 6 faces */}
-          <div className="absolute" style={{ width: 40, height: 40, transform: "translateZ(20px)" }}><Face value={1} /></div>
-          <div className="absolute" style={{ width: 40, height: 40, transform: "rotateY(90deg) translateZ(20px)" }}><Face value={2} /></div>
-          <div className="absolute" style={{ width: 40, height: 40, transform: "rotateX(90deg) translateZ(20px)" }}><Face value={3} /></div>
-          <div className="absolute" style={{ width: 40, height: 40, transform: "rotateX(-90deg) translateZ(20px)" }}><Face value={4} /></div>
-          <div className="absolute" style={{ width: 40, height: 40, transform: "rotateY(-90deg) translateZ(20px)" }}><Face value={5} /></div>
-          <div className="absolute" style={{ width: 40, height: 40, transform: "rotateY(180deg) translateZ(20px)" }}><Face value={6} /></div>
+          <div className="absolute" style={{ width: 44, height: 44, transform: "translateZ(22px)" }}><Face value={1} /></div>
+          <div className="absolute" style={{ width: 44, height: 44, transform: "rotateY(90deg) translateZ(22px)" }}><Face value={2} /></div>
+          <div className="absolute" style={{ width: 44, height: 44, transform: "rotateX(90deg) translateZ(22px)" }}><Face value={3} /></div>
+          <div className="absolute" style={{ width: 44, height: 44, transform: "rotateX(-90deg) translateZ(22px)" }}><Face value={4} /></div>
+          <div className="absolute" style={{ width: 44, height: 44, transform: "rotateY(-90deg) translateZ(22px)" }}><Face value={5} /></div>
+          <div className="absolute" style={{ width: 44, height: 44, transform: "rotateY(180deg) translateZ(22px)" }}><Face value={6} /></div>
         </div>
       </button>
 

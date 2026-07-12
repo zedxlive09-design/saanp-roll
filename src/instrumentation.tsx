@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Dialog } from "@radix-ui/react-dialog";
-import { ChevronDown, ExternalLink, RefreshCw } from "lucide-react";
+import { AlertTriangle, ChevronDown, ExternalLink, RefreshCw } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 type SyncError = {
@@ -119,9 +119,10 @@ function CrashFallback() {
       }}
     >
       <div className="w-full max-w-sm rounded-3xl border border-destructive/40 bg-gradient-to-br from-destructive/15 via-card to-card p-8 text-center shadow-paper-lg">
-        <div className="mb-3 text-5xl" role="img" aria-label="warning">
-          ⚠️
-        </div>
+        <AlertTriangle
+          className="mb-3 size-12 text-destructive"
+          aria-label="warning"
+        />
         <h2 className="font-display text-2xl font-bold text-destructive">
           Something went wrong
         </h2>

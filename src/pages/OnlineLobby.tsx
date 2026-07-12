@@ -26,6 +26,8 @@ import {
   Wifi,
   Swords,
   X,
+  Coins,
+  Cpu,
 } from "lucide-react";
 
 /**
@@ -48,6 +50,7 @@ export default function OnlineLobby() {
   const [createCode, setCreateCode] = useState("");
   const [playerCount, setPlayerCount] = useState(2);
   const [boardMode, setBoardMode] = useState<BoardMode>("classic");
+  const [entryFee, setEntryFee] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
@@ -55,6 +58,18 @@ export default function OnlineLobby() {
   const [lobbyMode, setLobbyMode] = useState<"friends" | "quickmatch">(
     "friends",
   );
+
+  // Coins balance (DEFAULT_COINS = 500 if unauthenticated or never set).
+  const coinsBalance = useQuery(api.coins.getMyCoins);
+  const coins = coinsBalance ?? 0;
+
+  const ENTRY_FEE_TIERS: { label: string; value: number; hint: string }[] = [
+    { label: "Free", value: 0, hint: "No entry fee" },
+    { label: "Casual", value: 50, hint: "50 coins" },
+    { label: "Pro", value: 200, hint: "200 coins" },
+    { label: "High Roller", value: 500, hint: "500 coins" },
+  ];
+  const insufficientCoins = isAuthenticated && entryFee > coins;
 
   // Quick Match (real matchmaking) state
   const { myQueueEntry, joinQueue, leaveQueue } = useMatchmaking();
@@ -87,16 +102,39 @@ export default function OnlineLobby() {
   }, [myQueueEntry, navigate]);
 
   const handleCreate = async () => {
+    if (entryFee > 0 && !isAuthenticated) {
+      toast.error("Sign in to create a paid room");
+      navigate("/auth");
+      return;
+    }
+    if (insufficientCoins) {
+      toast.error(
+        `Not enough coins — need ${entryFee}, have ${coins}`,
+      );
+      return;
+    }
     setIsLoading(true);
     try {
-      const result = await createGame({ boardId: boardMode, playerCount });
+      const result = await createGame({
+        boardId: boardMode,
+        playerCount,
+        entryFee,
+      });
       const code = result.roomCode;
       setCreateCode(code);
       setGameId(result.gameId);
       setPhase("waiting");
-      toast.success("Room created! Share the code with friends.");
+      if (entryFee > 0) {
+        toast.success(
+          `Room created! −${entryFee} coins entry fee`,
+        );
+      } else {
+        toast.success("Room created! Share the code with friends.");
+      }
     } catch (err) {
-      toast.error("Failed to create room");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create room",
+      );
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -428,10 +466,80 @@ export default function OnlineLobby() {
                           </div>
                         </div>
 
+                        {/* Entry Fee */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-medium text-white/55">
+                              Entry Fee
+                            </p>
+                            {/* Coins balance chip */}
+                            <div className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1">
+                              <Coins className="h-3 w-3 text-primary" />
+                              <span className="font-display text-xs font-bold text-primary">
+                                {isAuthenticated ? coins.toLocaleString() : "—"}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {ENTRY_FEE_TIERS.map((tier) => {
+                              const isSelected = entryFee === tier.value;
+                              const tooExpensive =
+                                isAuthenticated && tier.value > coins;
+                              return (
+                                <button
+                                  key={tier.value}
+                                  type="button"
+                                  onClick={() => setEntryFee(tier.value)}
+                                  disabled={tooExpensive}
+                                  className={`flex flex-col items-center gap-0.5 rounded-xl border-2 px-1 py-2 transition-all cursor-pointer ${
+                                    isSelected
+                                      ? "border-primary bg-primary/15"
+                                      : tooExpensive
+                                        ? "cursor-not-allowed border-white/10 bg-white/5 opacity-40"
+                                        : "border-white/15 bg-white/5 hover:border-white/30 hover:bg-white/10"
+                                  }`}
+                                  title={tooExpensive ? "Not enough coins" : tier.hint}
+                                >
+                                  <span
+                                    className={`font-display text-xs font-bold ${
+                                      isSelected
+                                        ? "text-primary"
+                                        : "text-white/80"
+                                    }`}
+                                  >
+                                    {tier.label}
+                                  </span>
+                                  <span
+                                    className={`text-[10px] ${
+                                      isSelected
+                                        ? "text-primary/80"
+                                        : "text-white/55"
+                                    }`}
+                                  >
+                                    {tier.value === 0 ? "Free" : tier.value}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {insufficientCoins && (
+                            <p className="text-[11px] font-medium text-destructive">
+                              Not enough coins for this tier — pick a lower tier
+                              or earn more.
+                            </p>
+                          )}
+                          {entryFee > 0 && (
+                            <p className="text-[11px] text-white/55">
+                              Winner takes the pot ({entryFee} × joined players).
+                              Leaving mid-match counts as a defeat.
+                            </p>
+                          )}
+                        </div>
+
                         <Button
                           className="h-12 w-full font-semibold shadow-[0_6px_0_0_oklch(0.5_0.12_55)] hover:shadow-[0_4px_0_0_oklch(0.5_0.12_55)] active:translate-y-0.5"
                           onClick={handleCreate}
-                          disabled={isLoading}
+                          disabled={isLoading || insufficientCoins}
                         >
                           {isLoading ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -708,6 +816,16 @@ export default function OnlineLobby() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-white/90">
                               {player.name}
+                              {player.isBot && (
+                                <Badge
+                                  variant="secondary"
+                                  className="ml-2 gap-1 text-[10px]"
+                                  title="Bot"
+                                >
+                                  <Cpu className="size-2.5" />
+                                  BOT
+                                </Badge>
+                              )}
                               {player.userId === game?.hostUserId && (
                                 <Badge
                                   variant="secondary"
@@ -766,6 +884,16 @@ export default function OnlineLobby() {
                       Need at least 2 players to start
                     </p>
                   )}
+
+                  {/* Subtle bot auto-fill hint — shown whenever the room is
+                      still waiting for players. The cron in src/convex/bots.ts
+                      fills empty slots with AI bots 30s after room creation. */}
+                  <div className="flex items-center justify-center gap-1.5 text-[11px] text-white/45">
+                    <Cpu className="size-3" />
+                    <span>
+                      Bots will auto-join after 30s if no players join
+                    </span>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>

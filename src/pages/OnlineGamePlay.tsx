@@ -8,17 +8,34 @@ import { useAuth } from "@/hooks/use-auth";
 import { BOARD_CONFIGS, getSnakeTail, getLadderTop } from "@/lib/game-engine";
 import { soundManager } from "@/lib/sounds";
 import {
-  ArrowLeft,
+  AlertTriangle,
+  Clock,
+  Cpu,
+  Crown,
+  Dices,
+  Hash,
+  Loader2,
+  LogOut,
   RefreshCw,
   ScrollText,
+  Timer,
+  Trophy,
   Wifi,
   WifiOff,
-  Timer,
-  Clock,
-  Hash,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { LandscapePrompt } from "@/components/game/LandscapePrompt";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 /**
  * Online multiplayer gameplay — full-bleed felt-green table (venom variant
@@ -50,6 +67,10 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   const navigate = useNavigate();
   const { game, rollDiceOnline, leaveGame, skipTurn } =
     useGameRoom(roomCode);
+  // Local Convex user id — used to detect "is it my turn?" and to disable
+  // the dice during opponent / bot turns.
+  const { user } = useAuth();
+  const myUserId = (user?._id as string | undefined) ?? null;
   const [isResolving, setIsResolving] = useState(false);
   // Synchronous mirror of isResolving for dice-debounce (rapid taps can slip
   // through React state since setState is async within a frame).
@@ -57,6 +78,8 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   const [lastRollValue, setLastRollValue] = useState<number | null>(null);
   const [showMoveLog, setShowMoveLog] = useState(false);
   const [highlightedTile, setHighlightedTile] = useState<number | null>(null);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
   const [animatedPositions, setAnimatedPositions] = useState<
     Record<string, number>
   >({});
@@ -176,7 +199,9 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
           animate={{ opacity: 1 }}
           className="text-center"
         >
-          <div className="animate-pulse text-5xl">🎲</div>
+          <div className="flex justify-center">
+            <Dices className="size-12 animate-pulse text-white/60" />
+          </div>
           <p className="mt-3 font-display text-sm text-white/60">
             Loading game...
           </p>
@@ -198,8 +223,11 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
         }}
       >
         <div className="w-full max-w-sm rounded-3xl border border-destructive/40 bg-gradient-to-br from-destructive/15 via-card to-card p-8 text-center shadow-paper-lg">
-          <div className="mb-3 text-5xl" role="img" aria-label="not found">
-            🚪
+          <div className="mb-3 flex justify-center">
+            <LogOut
+              className="size-12 text-destructive"
+              aria-label="not found"
+            />
           </div>
           <h2 className="font-display text-2xl font-bold text-destructive">
             Game not found
@@ -253,7 +281,19 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
         ? animatedPositions[p.userId]
         : p.position,
     consecutiveSixes: p.consecutiveSixes,
+    isBot: p.isBot === true,
   }));
+
+  // True if it's currently a bot's turn (the auto-advance cron will roll
+  // for them server-side). Used to disable the dice + show a "rolling…"
+  // hint so the human doesn't tap and get an "It's not your turn" error.
+  const isBotTurn = !!currentPlayer?.isBot && !isGameOver;
+  // True if it's the local human's turn. False during opponent / bot turns.
+  const isMyTurn =
+    !isGameOver &&
+    !!myUserId &&
+    !!currentPlayer &&
+    currentPlayer.userId === myUserId;
 
   const handleRoll = useCallback(
     async (roll: number) => {
@@ -354,10 +394,48 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
   }, [game?._id, rollDiceOnline]);
 
   const handleLeave = async () => {
-    if (game?._id) {
-      await leaveGame({ gameId: game._id as any });
+    if (!game?._id) {
+      navigate("/home");
+      return;
     }
-    navigate("/home");
+    // Finished game — just navigate home, no penalty, no dialog.
+    if (game.status === "finished") {
+      navigate("/home");
+      return;
+    }
+    // Waiting / playing — show the confirmation dialog first.
+    setShowLeaveDialog(true);
+  };
+
+  const handleConfirmLeave = async () => {
+    setShowLeaveDialog(false);
+    if (!game?._id) {
+      navigate("/home");
+      return;
+    }
+    setIsLeaving(true);
+    try {
+      const result = await leaveGame({ gameId: game._id as any });
+      if (result.outcome === "won_by_default") {
+        // This player was the last one standing — they get the pot.
+        if (result.potAwarded && result.potAwarded > 0) {
+          toast.success(
+            `+${result.potAwarded} coins — You won by default!`,
+          );
+        } else {
+          toast.success("You won by default!");
+        }
+      } else if (result.outcome === "defeat") {
+        toast.error("You left the match — counted as defeat");
+      } else if (result.outcome === "removed") {
+        // Pre-start leave — no toast needed (silent removal).
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLeaving(false);
+      navigate("/home");
+    }
   };
 
   const handleRematch = () => {
@@ -398,13 +476,18 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
 
         {/* === Top HUD: back + player chips + room code + move log === */}
         <div className="absolute top-0 left-0 right-0 z-20 flex items-start justify-between gap-2 p-3 safe-top">
-          {/* Back (translucent game icon) */}
+          {/* Leave Match (translucent game icon — confirms before penalty) */}
           <button
             onClick={handleLeave}
-            aria-label="Leave game"
-            className="flex size-10 items-center justify-center rounded-xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/40"
+            aria-label="Leave match"
+            disabled={isLeaving}
+            className="flex size-10 items-center justify-center rounded-xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:border-destructive/40 hover:bg-destructive/15 hover:text-destructive disabled:opacity-50"
           >
-            <ArrowLeft className="size-5" />
+            {isLeaving ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <LogOut className="size-5" />
+            )}
           </button>
 
           {/* Player chips + room code badge */}
@@ -436,11 +519,19 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
                     <span className="text-[11px] font-semibold text-white/90">
                       {player.position}
                     </span>
+                    {dbPlayer?.isBot && (
+                      <span
+                        className="flex size-3.5 items-center justify-center rounded-full bg-secondary/25 text-secondary ring-1 ring-secondary/40"
+                        title="Bot"
+                      >
+                        <Cpu className="size-2" />
+                      </span>
+                    )}
                     {disconnected && (
                       <WifiOff className="size-3 text-destructive" />
                     )}
                     {winner?.userId === player.id && (
-                      <span className="text-xs">👑</span>
+                      <Crown className="size-3.5 text-primary" />
                     )}
                   </div>
                 );
@@ -501,7 +592,12 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
                 <DiceRoll
                   onRoll={handleRoll}
                   serverRoll={handleServerRoll}
-                  disabled={isResolving || isGameOver || currentPlayerDisconnected}
+                  disabled={
+                    isResolving ||
+                    isGameOver ||
+                    currentPlayerDisconnected ||
+                    !isMyTurn
+                  }
                   currentPlayerColor={currentPlayer?.color}
                   isExtraRoll={isExtraRoll}
                 />
@@ -584,9 +680,26 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
             </div>
 
             {/* Hint / last-roll readout */}
-            {!isResolving && !currentPlayerDisconnected && (
+            {!isResolving && !currentPlayerDisconnected && isMyTurn && (
               <p className="text-[11px] text-white/55">Tap the dice to roll</p>
             )}
+            {!isResolving && !currentPlayerDisconnected && isBotTurn && (
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold text-secondary/90">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-secondary/70 opacity-75" />
+                  <span className="relative inline-flex size-2 rounded-full bg-secondary" />
+                </span>
+                {currentPlayer?.name} is rolling…
+              </p>
+            )}
+            {!isResolving &&
+              !currentPlayerDisconnected &&
+              !isMyTurn &&
+              !isBotTurn && (
+                <p className="text-[11px] text-white/55">
+                  Waiting for {currentPlayer?.name}…
+                </p>
+              )}
             {lastRollValue !== null && !isResolving && (
               <p className="text-[11px] text-white/45">
                 Last roll:{" "}
@@ -617,9 +730,9 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", delay: 0.2 }}
-                  className="mb-3 text-6xl"
+                  className="mb-3 flex justify-center"
                 >
-                  🏆
+                  <Trophy className="size-16 text-primary" />
                 </motion.div>
                 <h2 className="font-display text-3xl font-bold text-primary">
                   {winner.name} Wins!
@@ -667,7 +780,7 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
                   onClick={() => setShowMoveLog(false)}
                   className="text-white/60 hover:text-white"
                 >
-                  ✕
+                  <X className="size-4" />
                 </button>
               </div>
               <div className="max-h-[calc(100%-4rem)] overflow-y-auto p-4 scrollbar-thin">
@@ -683,6 +796,43 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* === Leave Match confirmation dialog === */}
+        <AlertDialog
+          open={showLeaveDialog}
+          onOpenChange={(open) => {
+            if (!isLeaving) setShowLeaveDialog(open);
+          }}
+        >
+          <AlertDialogContent className="border-destructive/40 bg-gradient-to-br from-destructive/10 via-card to-card">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 font-display text-destructive">
+                <AlertTriangle className="size-5" />
+                Leave this match?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Leaving an in-progress match counts as a{" "}
+                <span className="font-semibold text-destructive">defeat</span>
+                {game?.status === "playing"
+                  ? " and forfeits your entry fee. The remaining player may win by default."
+                  : "."}{" "}
+                Are you sure?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="border-white/15 bg-white/5 text-white/85 hover:bg-white/10 hover:text-white">
+                Stay
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmLeave}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                <LogOut className="mr-1.5 size-4" />
+                Leave
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </>
   );

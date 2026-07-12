@@ -30,6 +30,11 @@ const schema = defineSchema(
       isAnonymous: v.optional(v.boolean()), // is the user anonymous. do not remove
 
       role: v.optional(roleValidator), // role of the user. do not remove
+
+      // Coins/economy (Ludo/8 Ball Pool style). Default 500 on first sign-in.
+      coins: v.optional(v.number()),
+      // Timestamp (ms) of the last daily-bonus claim; null/undefined = never.
+      lastBonusClaim: v.optional(v.number()),
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
     // Online game rooms
@@ -46,6 +51,13 @@ const schema = defineSchema(
           isConnected: v.boolean(),
           position: v.number(),
           consecutiveSixes: v.number(),
+          // True once a player intentionally left an in-progress match
+          // (counts as a defeat). Distinct from transient isConnected flips.
+          leftGame: v.optional(v.boolean()),
+          // True for AI-controlled bot players (auto-filled after 30s when no
+          // real players join a "waiting" room). Bots roll server-side via
+          // the same engine path as human players.
+          isBot: v.optional(v.boolean()),
         }),
       ),
       currentPlayerIndex: v.number(),
@@ -55,6 +67,11 @@ const schema = defineSchema(
       moveLog: v.array(v.string()),
       turnStartedAt: v.number(), // timestamp when current turn began
       createdAt: v.number(),
+      // Per-player entry fee (coins). 0 = Free tier. Default 0 for back-compat.
+      entryFee: v.optional(v.number()),
+      // Accumulated pot (sum of paid entry fees). Awarded to the winner on
+      // game end (including leave-as-defeat wins).
+      pot: v.optional(v.number()),
     })
       .index("by_roomCode", ["roomCode"])
       .index("by_status", ["status"]),

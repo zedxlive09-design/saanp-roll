@@ -1,106 +1,328 @@
 /**
  * Procedural sound effects for Saanp Roll.
  *
- * Synthesizes short sound effects using the Web Audio API (OscillatorNode,
- * GainNode, etc.) and caches them for replay. No external audio files needed.
+ * Synthesizes short, satisfying, game-like sound effects using the Web Audio
+ * API (OfflineAudioContext: OscillatorNode, GainNode, BiquadFilterNode,
+ * WaveShaperNode, AudioBufferSourceNode) and caches them for replay. No
+ * external audio files needed.
  *
  * Architecture note: This uses Howler.js as the playback layer for consistency
  * with the spec, even though the sounds themselves are synthesized procedurally
  * rather than loaded from files. Replace the synthesis functions with
  * Howler-sourced .mp3/.wav files later if you have custom audio assets.
+ *
+ * Synthesis model:
+ *   A sound is a `RichSoundConfig` made of:
+ *     - `tones`:  layered oscillators (with optional harmonic partials,
+ *                 frequency sweeps, detune, percussive ADSR-style envelopes)
+ *     - `noise`:  layered noise bursts (white / pink / brown) shaped by an
+ *                 optional biquad filter (with sweep) + tremolo for shakers
+ *     - `softClip`: gentle tanh waveshaper on the master bus for warmth and
+ *                 to avoid harsh digital clipping on mobile speakers
  */
 
 import { Howl } from "howler";
 
 // ---------------------------------------------------------------------------
+// Synthesis types
+// ---------------------------------------------------------------------------
+
+/** A single additive harmonic partial. */
+type Harmonic = {
+  /** Frequency multiplier (2 = one octave up, etc.). */
+  mul: number;
+  /** Relative gain (0–1) of this partial vs the layer's base oscillator. */
+  gain: number;
+};
+
+/** A layered tone (oscillator + optional harmonic partials). */
+type ToneLayer = {
+  /** Hz, or [start, end] for a linear frequency sweep. */
+  freq: number | [number, number];
+  /** Length of this layer in seconds (from its own start). */
+  duration: number;
+  /** Delay before this layer starts (seconds from sound start). */
+  delay?: number;
+  /** Waveform. Defaults to sine. */
+  type?: OscillatorType;
+  /** Peak gain (0–1) for this layer. Defaults to 0.3. */
+  gain?: number;
+  /** Attack time (s). Defaults to 0.005. */
+  attack?: number;
+  /** Detune in cents (for thickening / chorus). */
+  detune?: number;
+  /** Additive sine partials for body/warmth. */
+  harmonics?: Harmonic[];
+};
+
+type NoiseColor = "white" | "pink" | "brown";
+
+/** A layered noise burst, optionally filtered and tremolo-modulated. */
+type NoiseLayer = {
+  /** Length of the noise burst in seconds. */
+  duration: number;
+  /** Delay before this burst starts (seconds from sound start). */
+  delay?: number;
+  /** Noise color. Defaults to white. */
+  type?: NoiseColor;
+  /** Peak gain (0–1). Defaults to 0.2. */
+  gain?: number;
+  /** Attack time (s). Defaults to 0.005. */
+  attack?: number;
+  /** Release tail (s). Defaults to 0.04. */
+  release?: number;
+  /** Optional biquad filter on the noise. */
+  filter?: BiquadFilterType;
+  /** Filter center frequency (Hz). */
+  filterFreq?: number;
+  /** Filter Q. */
+  filterQ?: number;
+  /** Sweep the filter frequency over the burst [start, end] Hz. */
+  filterSweep?: [number, number];
+  /** Amplitude tremolo baked into the buffer (for shaker / sand textures). */
+  tremolo?: { rate: number; depth: number };
+};
+
+/** Full multi-layer sound recipe. */
+type RichSoundConfig = {
+  /** Total render duration in seconds. */
+  duration: number;
+  /** Master volume (0–1). Defaults to 0.3. */
+  volume?: number;
+  /** Enable gentle tanh soft-clip on the master bus for warmth. */
+  softClip?: boolean;
+  /** Tonal layers. */
+  tones?: ToneLayer[];
+  /** Noise layer(s). Single or array. */
+  noise?: NoiseLayer | NoiseLayer[];
+};
+
+// ---------------------------------------------------------------------------
 // Synthesis helpers
 // ---------------------------------------------------------------------------
 
-type SoundConfig = {
-  /** Hz frequency (or array for sweeps). */
-  freq: number | number[];
-  /** Duration in seconds. */
-  duration: number;
-  /** Volume 0–1. */
-  volume?: number;
-  /** Waveform type. */
-  type?: OscillatorType;
-  /** If true, adds noise-like texture via rapid frequency modulation. */
-  noisy?: boolean;
-};
+/** Percussive amplitude envelope: fast attack then exp decay over duration. */
+function applyPercussiveEnvelope(
+  param: AudioParam,
+  start: number,
+  duration: number,
+  peak: number,
+  attack: number,
+): void {
+  const a = Math.max(0.0005, Math.min(attack, duration * 0.4));
+  param.setValueAtTime(0.0001, start);
+  param.linearRampToValueAtTime(peak, start + a);
+  param.exponentialRampToValueAtTime(0.0001, start + duration);
+}
+
+/** Sustained amplitude envelope: attack → hold → exp release. */
+function applySustainedEnvelope(
+  param: AudioParam,
+  start: number,
+  duration: number,
+  peak: number,
+  attack: number,
+  release: number,
+): void {
+  const a = Math.max(0.0005, Math.min(attack, duration * 0.3));
+  const r = Math.max(0.004, Math.min(release, duration * 0.4));
+  const holdEnd = Math.max(start + a, start + duration - r);
+  param.setValueAtTime(0.0001, start);
+  param.linearRampToValueAtTime(peak, start + a);
+  param.setValueAtTime(peak, holdEnd);
+  param.exponentialRampToValueAtTime(0.0001, start + duration);
+}
+
+/** Fill a Float32Array with the requested noise color + optional tremolo. */
+function fillNoise(
+  data: Float32Array,
+  color: NoiseColor,
+  sampleRate: number,
+  tremolo?: { rate: number; depth: number },
+): void {
+  const n = data.length;
+  if (color === "white") {
+    for (let i = 0; i < n; i++) data[i] = Math.random() * 2 - 1;
+  } else if (color === "brown") {
+    let last = 0;
+    for (let i = 0; i < n; i++) {
+      const w = Math.random() * 2 - 1;
+      last = (last + 0.02 * w) / 1.02;
+      data[i] = last * 3.5;
+    }
+  } else {
+    // pink (Paul Kellet's economical approximation)
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (let i = 0; i < n; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179;
+      b1 = 0.99332 * b1 + w * 0.0750759;
+      b2 = 0.969 * b2 + w * 0.153852;
+      b3 = 0.8665 * b3 + w * 0.3104856;
+      b4 = 0.55 * b4 + w * 0.5329522;
+      b5 = -0.7616 * b5 - w * 0.016898;
+      data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+      b6 = w * 0.115926;
+    }
+  }
+  if (tremolo) {
+    const { rate, depth } = tremolo;
+    const twoPi = Math.PI * 2;
+    for (let i = 0; i < n; i++) {
+      const t = i / sampleRate;
+      const m = 1 - depth + depth * (0.5 + 0.5 * Math.sin(twoPi * rate * t));
+      data[i] *= m;
+    }
+  }
+}
+
+/** Build a tanh soft-clip curve for the master waveshaper. */
+function makeTanhCurve(samples: number): Float32Array<ArrayBuffer> {
+  const buffer = new ArrayBuffer(samples * Float32Array.BYTES_PER_ELEMENT);
+  const curve = new Float32Array(buffer);
+  for (let i = 0; i < samples; i++) {
+    const x = (i / (samples - 1)) * 2 - 1;
+    curve[i] = Math.tanh(x * 1.5);
+  }
+  return curve;
+}
+
+/** Build a tonal layer (base oscillator + harmonic partials) into the graph. */
+function buildTone(
+  ctx: OfflineAudioContext,
+  layer: ToneLayer,
+  master: AudioNode,
+  now: number,
+): void {
+  const start = now + (layer.delay ?? 0);
+  const dur = layer.duration;
+  const peak = layer.gain ?? 0.3;
+  const attack = layer.attack ?? 0.005;
+
+  const gain = ctx.createGain();
+  applyPercussiveEnvelope(gain.gain, start, dur, peak, attack);
+  gain.connect(master);
+
+  const freqs: [number, number] = Array.isArray(layer.freq)
+    ? [layer.freq[0], layer.freq[layer.freq.length - 1]]
+    : [layer.freq, layer.freq];
+  const sweep = freqs[1] !== freqs[0];
+
+  // Base oscillator
+  const osc = ctx.createOscillator();
+  osc.type = layer.type ?? "sine";
+  osc.frequency.setValueAtTime(freqs[0], start);
+  if (sweep) osc.frequency.linearRampToValueAtTime(freqs[1], start + dur);
+  if (layer.detune) osc.detune.setValueAtTime(layer.detune, start);
+  osc.connect(gain);
+  osc.start(start);
+  osc.stop(start + dur + 0.02);
+
+  // Additive harmonic partials (sine) for body / warmth
+  if (layer.harmonics) {
+    for (const h of layer.harmonics) {
+      const hosc = ctx.createOscillator();
+      hosc.type = "sine";
+      hosc.frequency.setValueAtTime(freqs[0] * h.mul, start);
+      if (sweep) {
+        hosc.frequency.linearRampToValueAtTime(freqs[1] * h.mul, start + dur);
+      }
+      const hgain = ctx.createGain();
+      hgain.gain.value = h.gain;
+      hosc.connect(hgain);
+      hgain.connect(gain);
+      hosc.start(start);
+      hosc.stop(start + dur + 0.02);
+    }
+  }
+}
+
+/** Build a noise layer (buffer source → optional filter → gain) into the graph. */
+function buildNoise(
+  ctx: OfflineAudioContext,
+  layer: NoiseLayer,
+  master: AudioNode,
+  now: number,
+  sampleRate: number,
+): void {
+  const start = now + (layer.delay ?? 0);
+  const dur = layer.duration;
+  const peak = layer.gain ?? 0.2;
+  const attack = layer.attack ?? 0.005;
+  const release = layer.release ?? 0.04;
+  const color: NoiseColor = layer.type ?? "white";
+
+  const len = Math.max(1, Math.ceil(sampleRate * dur));
+  const buf = ctx.createBuffer(1, len, sampleRate);
+  fillNoise(buf.getChannelData(0), color, sampleRate, layer.tremolo);
+
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+
+  let last: AudioNode = src;
+  if (layer.filter) {
+    const filt = ctx.createBiquadFilter();
+    filt.type = layer.filter;
+    if (layer.filterSweep) {
+      filt.frequency.setValueAtTime(layer.filterSweep[0], start);
+      filt.frequency.linearRampToValueAtTime(layer.filterSweep[1], start + dur);
+    } else {
+      filt.frequency.value = layer.filterFreq ?? 1000;
+    }
+    if (layer.filterQ !== undefined) filt.Q.value = layer.filterQ;
+    src.connect(filt);
+    last = filt;
+  }
+
+  const gain = ctx.createGain();
+  applySustainedEnvelope(gain.gain, start, dur, peak, attack, release);
+  last.connect(gain);
+  gain.connect(master);
+  src.start(start);
+  src.stop(start + dur + 0.02);
+}
 
 /**
- * Render a synthetic tone to a WAV ArrayBuffer using the Web Audio API's
- * offline rendering. Returns a blob URL that Howler can load.
+ * Render a rich multi-layer sound to a WAV ArrayBuffer using the Web Audio
+ * API's offline rendering. Returns a blob URL that Howler can load.
  */
-async function renderSfx(config: SoundConfig): Promise<string> {
+async function renderSfx(config: RichSoundConfig): Promise<string> {
   const sampleRate = 44100;
   const duration = config.duration;
-  const length = sampleRate * duration;
+  const length = Math.ceil(sampleRate * duration);
 
-  // Create offline audio context
-  const audioCtx = new OfflineAudioContext(1, length, sampleRate);
+  const ctx = new OfflineAudioContext(1, length, sampleRate);
+  const now = ctx.currentTime;
 
-  const masterGain = audioCtx.createGain();
-  masterGain.gain.value = config.volume ?? 0.3;
-  masterGain.connect(audioCtx.destination);
+  // Master bus
+  const master = ctx.createGain();
+  master.gain.value = config.volume ?? 0.3;
 
-  // Main oscillator
-  const osc = audioCtx.createOscillator();
-  osc.type = config.type ?? "sine";
+  let tail: AudioNode = master;
+  if (config.softClip) {
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = makeTanhCurve(2048);
+    master.connect(shaper);
+    tail = shaper;
+  }
+  tail.connect(ctx.destination);
 
-  const now = audioCtx.currentTime;
-
-  if (Array.isArray(config.freq)) {
-    // Frequency sweep
-    osc.frequency.setValueAtTime(config.freq[0], now);
-    osc.frequency.linearRampToValueAtTime(
-      config.freq[config.freq.length - 1],
-      now + duration,
-    );
-  } else {
-    osc.frequency.setValueAtTime(config.freq, now);
+  // Tonal layers
+  if (config.tones) {
+    for (const t of config.tones) buildTone(ctx, t, master, now);
   }
 
-  // Amplitude envelope (fade in/out)
-  const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.6, now + 0.01);
-  gain.gain.linearRampToValueAtTime(0.4, now + duration * 0.7);
-  gain.gain.linearRampToValueAtTime(0, now + duration);
-
-  osc.connect(gain);
-  gain.connect(masterGain);
-
-  // Noise layer for texture (e.g., dice rattle)
-  if (config.noisy) {
-    const bufferSize = audioCtx.sampleRate * duration;
-    const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const data = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.15;
-    }
-    const noise = audioCtx.createBufferSource();
-    noise.buffer = noiseBuffer;
-
-    const noiseGain = audioCtx.createGain();
-    noiseGain.gain.setValueAtTime(0, now);
-    noiseGain.gain.linearRampToValueAtTime(0.5, now + 0.02);
-    noiseGain.gain.linearRampToValueAtTime(0, now + duration * 0.8);
-    noise.connect(noiseGain);
-    noiseGain.connect(masterGain);
-
-    noise.start(now);
-    noise.stop(now + duration);
+  // Noise layers
+  if (config.noise) {
+    const arr: NoiseLayer[] = Array.isArray(config.noise)
+      ? config.noise
+      : [config.noise];
+    for (const nl of arr) buildNoise(ctx, nl, master, now, sampleRate);
   }
 
-  osc.start(now);
-  osc.stop(now + duration);
-
-  // Render to buffer
-  const renderedBuffer = await audioCtx.startRendering();
-  const wavData = bufferToWav(renderedBuffer);
-  const blob = new Blob([wavData], { type: "audio/wav" });
+  const rendered = await ctx.startRendering();
+  const wav = bufferToWav(rendered);
+  const blob = new Blob([wav], { type: "audio/wav" });
   return URL.createObjectURL(blob);
 }
 
@@ -134,7 +356,7 @@ function bufferToWav(buffer: AudioBuffer): ArrayBuffer {
   writeString(view, 36, "data");
   view.setUint32(40, dataLength, true);
 
-  // Write samples
+  // Write samples (mono render — channel 0)
   let offset = 44;
   for (let i = 0; i < data.length; i++) {
     const sample = Math.max(-1, Math.min(1, data[i]));
@@ -155,7 +377,77 @@ function writeString(view: DataView, offset: number, string: string) {
 // Sound effect synthesizer
 // ---------------------------------------------------------------------------
 
-export type SoundEffect = "dice_roll" | "tile_step" | "footstep" | "ladder_run" | "snake_slither" | "snake_bite" | "ladder_climb" | "win_fanfare" | "overshoot" | "reconnect_chime";
+export type SoundEffect =
+  | "dice_roll"
+  | "tile_step"
+  | "footstep"
+  | "ladder_run"
+  | "snake_slither"
+  | "snake_bite"
+  | "ladder_climb"
+  | "win_fanfare"
+  | "overshoot"
+  | "reconnect_chime";
+
+/** Soft wooden "tock" — a piece dropping on a wooden board. Shared by footstep + tile_step. */
+const tockConfig: RichSoundConfig = {
+  duration: 0.06,
+  volume: 0.5,
+  softClip: true,
+  tones: [
+    {
+      freq: 200,
+      duration: 0.05,
+      type: "sine",
+      gain: 0.55,
+      attack: 0.002,
+      harmonics: [
+        { mul: 2, gain: 0.22 },
+        { mul: 3, gain: 0.1 },
+      ],
+    },
+  ],
+  noise: [
+    {
+      duration: 0.02,
+      type: "white",
+      gain: 0.18,
+      filter: "highpass",
+      filterFreq: 2200,
+      attack: 0.001,
+      release: 0.01,
+    },
+  ],
+};
+
+/** Ascending ladder rungs — square pings climbing in pitch. Shared by ladder_run + ladder_climb. */
+const ladderConfig: RichSoundConfig = {
+  duration: 0.36,
+  volume: 0.42,
+  softClip: true,
+  tones: [300, 400, 500, 600, 700].map((f, i) => ({
+    freq: f as number,
+    duration: 0.07,
+    delay: i * 0.06,
+    type: "square" as OscillatorType,
+    gain: 0.3,
+    attack: 0.004,
+    harmonics: [
+      { mul: 2, gain: 0.18 },
+      { mul: 3, gain: 0.08 },
+    ],
+  })),
+  noise: [0, 1, 2, 3, 4].map((i) => ({
+    duration: 0.02,
+    delay: i * 0.06,
+    type: "white" as NoiseColor,
+    gain: 0.06,
+    filter: "highpass" as BiquadFilterType,
+    filterFreq: 2500,
+    attack: 0.001,
+    release: 0.008,
+  })),
+};
 
 class SoundManager {
   private cache = new Map<SoundEffect, Howl>();
@@ -187,82 +479,148 @@ class SoundManager {
     this.initialized = true;
 
     this.pending = Promise.all([
+      // dice_roll — wooden clatter: throw burst + 4 staggered clacks + settle thud
       this.register("dice_roll", {
-        freq: [200, 800],
-        duration: 0.3,
-        volume: 0.15,
-        type: "triangle",
-        noisy: true,
-      }),
-      this.register("tile_step", {
-        freq: 600,
-        duration: 0.04,
-        volume: 0.06,
-        type: "sine",
-      }),
-      this.register("snake_bite", {
-        freq: [400, 120],
-        duration: 0.35,
-        volume: 0.2,
-        type: "sawtooth",
-      }),
-      this.register("ladder_climb", {
-        freq: [300, 700],
-        duration: 0.3,
-        volume: 0.18,
-        type: "sine",
-      }),
-      this.register("win_fanfare", {
-        freq: 784,
-        duration: 0.5,
-        volume: 0.25,
-        type: "sine",
-      }),
-      this.register("overshoot", {
-        freq: [300, 100],
-        duration: 0.25,
-        volume: 0.12,
-        type: "triangle",
-      }),
-      this.register("reconnect_chime", {
-        freq: [523, 784], // C5 → G5 cheerful ascending chime
-        duration: 0.35,
-        volume: 0.15,
-        type: "sine",
-      }),
-
-      // Soft footstep — a muted thud with a tiny noise tick. Played per tile move.
-      this.register("footstep", {
-        freq: [180, 90],
-        duration: 0.06,
-        volume: 0.08,
-        type: "sine",
-        noisy: true,
-      }),
-
-      // Rapid running footsteps for ladder climb — quick double-tap feel.
-      this.register("ladder_run", {
-        freq: [220, 120],
-        duration: 0.18,
-        volume: 0.12,
-        type: "triangle",
-        noisy: true,
-      }),
-
-      // Snake slither — a descending filtered sweep with noise texture.
-      this.register("snake_slither", {
-        freq: [600, 200],
         duration: 0.4,
-        volume: 0.14,
-        type: "sawtooth",
-        noisy: true,
+        volume: 0.5,
+        softClip: true,
+        tones: [
+          { freq: 170, duration: 0.035, delay: 0.0, type: "square", gain: 0.32, attack: 0.002 },
+          { freq: 195, duration: 0.035, delay: 0.07, type: "square", gain: 0.3, attack: 0.002 },
+          { freq: 150, duration: 0.035, delay: 0.14, type: "square", gain: 0.3, attack: 0.002 },
+          { freq: 210, duration: 0.035, delay: 0.21, type: "square", gain: 0.28, attack: 0.002 },
+          {
+            freq: 90,
+            duration: 0.1,
+            delay: 0.27,
+            type: "sine",
+            gain: 0.4,
+            attack: 0.003,
+            harmonics: [
+              { mul: 2, gain: 0.25 },
+              { mul: 3, gain: 0.12 },
+            ],
+          },
+        ],
+        noise: [
+          { duration: 0.07, delay: 0.0, type: "white", gain: 0.3, filter: "bandpass", filterFreq: 1400, filterQ: 0.8, attack: 0.002, release: 0.03 },
+          { duration: 0.03, delay: 0.07, type: "white", gain: 0.12, filter: "highpass", filterFreq: 1800, attack: 0.001, release: 0.01 },
+          { duration: 0.03, delay: 0.14, type: "white", gain: 0.12, filter: "highpass", filterFreq: 1800, attack: 0.001, release: 0.01 },
+          { duration: 0.03, delay: 0.21, type: "white", gain: 0.12, filter: "highpass", filterFreq: 1800, attack: 0.001, release: 0.01 },
+        ],
+      }),
+
+      // tile_step / footstep — soft wooden tock
+      this.register("tile_step", tockConfig),
+      this.register("footstep", tockConfig),
+
+      // snake_bite — dramatic descending slide + hiss + landing thud
+      this.register("snake_bite", {
+        duration: 0.42,
+        volume: 0.5,
+        softClip: true,
+        tones: [
+          { freq: [500, 80], duration: 0.36, type: "sawtooth", gain: 0.3, attack: 0.005, detune: -6 },
+          { freq: [500, 80], duration: 0.36, type: "sawtooth", gain: 0.22, attack: 0.005, detune: 7 },
+          { freq: [100, 50], duration: 0.36, type: "sine", gain: 0.25, attack: 0.005 },
+          {
+            freq: 60,
+            duration: 0.11,
+            delay: 0.31,
+            type: "sine",
+            gain: 0.45,
+            attack: 0.003,
+            harmonics: [{ mul: 2, gain: 0.2 }],
+          },
+        ],
+        noise: [
+          {
+            duration: 0.4,
+            type: "white",
+            gain: 0.18,
+            filter: "bandpass",
+            filterFreq: 2200,
+            filterQ: 0.7,
+            filterSweep: [3000, 700],
+            attack: 0.01,
+            release: 0.05,
+          },
+        ],
+      }),
+
+      // snake_slither — filtered sand/shaker noise with a faint tonal glue
+      this.register("snake_slither", {
+        duration: 0.5,
+        volume: 0.4,
+        softClip: false,
+        tones: [
+          { freq: [1200, 600], duration: 0.5, type: "sine", gain: 0.06, attack: 0.02 },
+        ],
+        noise: [
+          {
+            duration: 0.5,
+            type: "pink",
+            gain: 0.32,
+            filter: "bandpass",
+            filterFreq: 2500,
+            filterQ: 1.2,
+            filterSweep: [3000, 1200],
+            attack: 0.02,
+            release: 0.06,
+            tremolo: { rate: 18, depth: 0.5 },
+          },
+        ],
+      }),
+
+      // ladder_run / ladder_climb — ascending rung pings
+      this.register("ladder_run", ladderConfig),
+      this.register("ladder_climb", ladderConfig),
+
+      // win_fanfare — triumphant C5→E5→G5→C6 arpeggio + sparkle
+      this.register("win_fanfare", {
+        duration: 0.72,
+        volume: 0.42,
+        softClip: false,
+        tones: [
+          { freq: 523, duration: 0.18, delay: 0.0, type: "sine", gain: 0.32, attack: 0.008, harmonics: [{ mul: 2, gain: 0.22 }, { mul: 3, gain: 0.1 }] },
+          { freq: 659, duration: 0.18, delay: 0.13, type: "sine", gain: 0.32, attack: 0.008, harmonics: [{ mul: 2, gain: 0.22 }, { mul: 3, gain: 0.1 }] },
+          { freq: 784, duration: 0.18, delay: 0.26, type: "sine", gain: 0.34, attack: 0.008, harmonics: [{ mul: 2, gain: 0.22 }, { mul: 3, gain: 0.1 }] },
+          { freq: 1047, duration: 0.22, delay: 0.39, type: "sine", gain: 0.36, attack: 0.008, harmonics: [{ mul: 2, gain: 0.24 }, { mul: 3, gain: 0.12 }] },
+          { freq: 2093, duration: 0.18, delay: 0.52, type: "sine", gain: 0.18, attack: 0.004 },
+        ],
+      }),
+
+      // overshoot — game-show fail buzzer
+      this.register("overshoot", {
+        duration: 0.24,
+        volume: 0.42,
+        softClip: true,
+        tones: [
+          { freq: 150, duration: 0.22, type: "square", gain: 0.3, attack: 0.004, detune: -4 },
+          { freq: 150, duration: 0.22, type: "square", gain: 0.22, attack: 0.004, detune: 5 },
+          { freq: 450, duration: 0.22, type: "sine", gain: 0.1, attack: 0.004 },
+        ],
+        noise: [
+          { duration: 0.22, type: "white", gain: 0.08, filter: "bandpass", filterFreq: 1500, filterQ: 0.6, attack: 0.004, release: 0.03 },
+        ],
+      }),
+
+      // reconnect_chime — C5 → G5 ascending chime (kept), warmed with harmonics
+      this.register("reconnect_chime", {
+        duration: 0.38,
+        volume: 0.32,
+        softClip: false,
+        tones: [
+          { freq: 523, duration: 0.16, delay: 0.0, type: "sine", gain: 0.32, attack: 0.006, harmonics: [{ mul: 2, gain: 0.2 }] },
+          { freq: 784, duration: 0.22, delay: 0.13, type: "sine", gain: 0.34, attack: 0.006, harmonics: [{ mul: 2, gain: 0.22 }] },
+        ],
       }),
     ]).then(() => {});
   }
 
   private async register(
     name: SoundEffect,
-    config: SoundConfig,
+    config: RichSoundConfig,
   ): Promise<void> {
     const url = await renderSfx(config);
     this.urls.push(url);

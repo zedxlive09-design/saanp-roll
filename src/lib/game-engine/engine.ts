@@ -91,9 +91,9 @@ export function applyRoll(state: GameState, roll: number): GameState {
   // Build move log message
   let logMsg = `${player.name} rolled ${roll} (${player.position} → ${newPos}`;
   if (snakeTail) {
-    logMsg += ` → 🐍 ${snakeTail}`;
+    logMsg += ` → snake ${snakeTail}`;
   } else if (ladderTop) {
-    logMsg += ` → 🪜 ${ladderTop}`;
+    logMsg += ` → ladder ${ladderTop}`;
   }
   logMsg += ")";
 
@@ -106,7 +106,7 @@ export function applyRoll(state: GameState, roll: number): GameState {
       status: "game_over",
       winnerId: player.id,
       turnPhase: "next_player",
-      moveLog: [...state.moveLog, `${player.name} reached 100 and WINS! 🎉`],
+      moveLog: [...state.moveLog, `${player.name} reached 100 and WINS!`],
     };
   }
 
@@ -243,7 +243,7 @@ export function resolveTurn(
       results.push({
         type: "win",
         position: BOARD_SIZE,
-        message: `${newPlayer.name} reached 100 and WINS! 🎉`,
+        message: `${newPlayer.name} reached 100 and WINS!`,
       });
     } else {
       const finalState = advanceTurn(afterRoll);

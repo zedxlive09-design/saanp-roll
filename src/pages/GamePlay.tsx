@@ -16,7 +16,7 @@ import {
 } from "@/lib/game-engine";
 import type { BoardMode, GameState, PlayerSetup } from "@/lib/game-engine";
 import { soundManager } from "@/lib/sounds";
-import { ArrowLeft, RefreshCw, ScrollText, Cpu } from "lucide-react";
+import { Cpu, Crown, LogOut, RefreshCw, ScrollText, Trophy, X } from "lucide-react";
 import { LandscapePrompt } from "@/components/game/LandscapePrompt";
 import { useDeviceSpec } from "@/hooks/use-device-spec";
 import { haptics } from "@/lib/haptics";
@@ -329,13 +329,14 @@ function GamePlayInner({
 
         {/* === Top HUD: player chips === */}
         <div className="absolute top-0 left-0 right-0 z-20 flex items-start justify-between gap-2 p-3 safe-top">
-          {/* Back + mode */}
+          {/* Leave (local game — no penalty, just navigation) */}
           <button
             onClick={() => navigate("/home")}
-            className="flex size-10 items-center justify-center rounded-xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:bg-black/40"
+            className="flex size-10 items-center justify-center rounded-xl border border-white/15 bg-black/30 text-white/80 backdrop-blur-md transition-colors hover:border-destructive/40 hover:bg-destructive/15 hover:text-destructive"
             aria-label="Leave game"
+            title="Leave game"
           >
-            <ArrowLeft className="size-5" />
+            <LogOut className="size-5" />
           </button>
 
           {/* Player chips row */}
@@ -371,7 +372,7 @@ function GamePlayInner({
                       <Cpu className="size-2" />
                     </span>
                   )}
-                  {winner?.id === player.id && <span className="text-xs">👑</span>}
+                  {winner?.id === player.id && <Crown className="size-3.5 text-primary" />}
                 </div>
               );
             })}
@@ -486,9 +487,9 @@ function GamePlayInner({
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", delay: 0.2 }}
-                  className="mb-3 text-6xl"
+                  className="mb-3 flex justify-center"
                 >
-                  🏆
+                  <Trophy className="size-16 text-primary" />
                 </motion.div>
                 <h2 className="font-display text-3xl font-bold text-primary">
                   {winner.name} Wins!
@@ -532,7 +533,7 @@ function GamePlayInner({
                   onClick={() => setShowMoveLog(false)}
                   className="text-white/60 hover:text-white"
                 >
-                  ✕
+                  <X className="size-4" />
                 </button>
               </div>
               <div className="max-h-[calc(100%-4rem)] overflow-y-auto p-4 scrollbar-thin">

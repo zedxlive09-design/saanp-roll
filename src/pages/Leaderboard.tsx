@@ -234,7 +234,9 @@ export default function Leaderboard() {
                       <div className="flex-1 min-w-0">
                         <p className="font-display font-bold text-base text-white/95 truncate">
                           {entry.name}
-                          {rank === 1 && <span className="ml-1.5">👑</span>}
+                          {rank === 1 && (
+                            <Crown className="ml-1.5 inline size-3.5 text-primary" />
+                          )}
                         </p>
                         <p className="text-xs text-white/55">
                           {entry.wins} win{entry.wins !== 1 ? "s" : ""} ·{" "}

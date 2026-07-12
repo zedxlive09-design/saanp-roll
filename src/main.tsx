@@ -8,7 +8,7 @@ import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import { ThemeProvider } from "next-themes";
-import { RefreshCw } from "lucide-react";
+import { Radar, RefreshCw } from "lucide-react";
 import { ConnectionBadge } from "@/components/ConnectionBadge";
 import "./index.css";
 import "./types/global.d.ts";
@@ -55,9 +55,10 @@ function ConnectionErrorScreen() {
       }}
     >
       <div className="w-full max-w-sm rounded-3xl border border-destructive/40 bg-gradient-to-br from-destructive/15 via-card to-card p-8 text-center shadow-paper-lg">
-        <div className="mb-3 text-5xl" role="img" aria-label="disconnected">
-          📡
-        </div>
+        <Radar
+          className="mb-3 size-12 text-destructive"
+          aria-label="disconnected"
+        />
         <h2 className="font-display text-2xl font-bold text-destructive">
           Connection error
         </h2>

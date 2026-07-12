@@ -182,6 +182,134 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
     doSkip();
   }, [timeLeft, game, skipTurn]);
 
+  // === Derivations (null-safe, before early returns so hooks see them) ===
+  const boardMode = (game?.boardId ?? "classic") as "classic" | "venom";
+  const isGameOver = game?.status === "finished";
+  const currentPlayer = game?.players[game?.currentPlayerIndex ?? 0];
+  const isExtraRoll = game?.turnPhase === "extra_roll";
+  const currentPlayerDisconnected = !!currentPlayer && !currentPlayer.isConnected;
+  const isBotTurn = !!currentPlayer?.isBot && !isGameOver;
+  const isMyTurn =
+    !isGameOver && !!myUserId && !!currentPlayer && currentPlayer.userId === myUserId;
+  const winner = game?.players.find((p) => p.userId === game?.winnerId);
+  const timerUrgent = timeLeft <= 10;
+  const timerCritical = timeLeft <= 5;
+  const timerPercent = (timeLeft / TURN_TIMEOUT_SECONDS) * 100;
+  const turnNumber =
+    game && game.moveLog.length > 0
+      ? Math.ceil(game.moveLog.length / game.players.length)
+      : 1;
+  const displayPlayers = (game?.players ?? []).map((p) => ({
+    id: p.userId,
+    name: p.name,
+    color: p.color,
+    position:
+      animatedPositions[p.userId] !== undefined
+        ? animatedPositions[p.userId]
+        : p.position,
+    consecutiveSixes: p.consecutiveSixes,
+    isBot: p.isBot === true,
+  }));
+
+  const handleRoll = useCallback(
+    async (roll: number) => {
+      if (!game?._id) return;
+      // Debounce: check both React state AND a synchronous ref so rapid taps
+      // can't slip through and double-roll.
+      if (isResolving || isResolvingRef.current || isGameOver) return;
+      isResolvingRef.current = true;
+      setIsResolving(true);
+      setLastRollValue(roll);
+
+      const player = game!.players[game!.currentPlayerIndex];
+      const rawNewPos = player.position + roll;
+      const didOvershoot = rawNewPos > 100;
+
+      const landingTile = didOvershoot
+        ? player.position
+        : Math.min(rawNewPos, 100);
+      const fromPos = player.position;
+      const tilesToStep = landingTile - fromPos;
+
+      // Sound effects
+      if (didOvershoot) {
+        soundManager.play("overshoot");
+      }
+
+      if (!didOvershoot && rawNewPos <= 100 && tilesToStep > 0) {
+        const snakeTail = getSnakeTail(boardMode, rawNewPos);
+        const ladderTop = getLadderTop(boardMode, rawNewPos);
+        if (snakeTail) {
+          setTimeout(
+            () => soundManager.play("snake_bite"),
+            tilesToStep * TILE_STEP_DELAY + 200,
+          );
+        } else if (ladderTop) {
+          setTimeout(
+            () => soundManager.play("ladder_climb"),
+            tilesToStep * TILE_STEP_DELAY + 200,
+          );
+        }
+      }
+
+      if (game!.status === "finished") {
+        setTimeout(() => soundManager.play("win_fanfare"), 800);
+      }
+
+      if (!didOvershoot && landingTile <= 100) {
+        setHighlightedTile(landingTile);
+        setTimeout(() => setHighlightedTile(null), 1200);
+      }
+
+      if (tilesToStep > 0 && !didOvershoot) {
+        let step = 1;
+        const stepInterval = setInterval(() => {
+          const steppedPos = fromPos + step;
+          setAnimatedPositions((prev) => ({
+            ...prev,
+            [player.userId]: steppedPos,
+          }));
+          soundManager.play("tile_step");
+          step++;
+
+          if (steppedPos >= landingTile) {
+            clearInterval(stepInterval);
+
+            const finalizeTimeout = setTimeout(() => {
+              setHighlightedTile(null);
+              isResolvingRef.current = false;
+              setIsResolving(false);
+              setAnimatedPositions({});
+            }, 500);
+            animTimeoutRef.current = finalizeTimeout;
+          }
+        }, TILE_STEP_DELAY);
+        animTimeoutRef.current = stepInterval;
+      } else {
+        const timeout = setTimeout(() => {
+          isResolvingRef.current = false;
+          setIsResolving(false);
+        }, 500);
+        animTimeoutRef.current = timeout;
+      }
+    },
+    [game, isResolving, isGameOver, boardMode],
+  );
+
+  // Server roll handler for DiceRoll
+  const handleServerRoll = useCallback(async () => {
+    if (!game?._id) return 0;
+    try {
+      const result = await rollDiceOnline({ gameId: game._id as any });
+      return result.roll;
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to roll dice",
+      );
+      throw err;
+    }
+  }, [game?._id, rollDiceOnline]);
+
   // Loading state — full-bleed felt bg. Distinguish undefined (still
   // loading) from null (game not found / invalid room code) so an invalid
   // code doesn't show "Loading..." forever.
@@ -253,145 +381,12 @@ function OnlineGamePlayInner({ roomCode }: { roomCode: string }) {
     return <Navigate to="/lobby" replace />;
   }
 
-  const boardMode = game.boardId as "classic" | "venom";
-  const isGameOver = game.status === "finished";
-  const winner = game.players.find((p) => p.userId === game.winnerId);
-  const currentPlayer = game.players[game.currentPlayerIndex];
-  const isExtraRoll = game.turnPhase === "extra_roll";
-  const currentPlayerDisconnected = currentPlayer && !currentPlayer.isConnected;
-  const timerUrgent = timeLeft <= 10;
-  const timerCritical = timeLeft <= 5;
-
-  // Timer display value
-  const timerPercent = (timeLeft / TURN_TIMEOUT_SECONDS) * 100;
-
-  // Turn number for HUD
-  const turnNumber =
-    game.moveLog.length > 0
-      ? Math.ceil(game.moveLog.length / game.players.length)
-      : 1;
-
-  // Derive display positions with animation support
-  const displayPlayers = game.players.map((p) => ({
-    id: p.userId,
-    name: p.name,
-    color: p.color,
-    position:
-      animatedPositions[p.userId] !== undefined
-        ? animatedPositions[p.userId]
-        : p.position,
-    consecutiveSixes: p.consecutiveSixes,
-    isBot: p.isBot === true,
-  }));
-
-  // True if it's currently a bot's turn (the auto-advance cron will roll
-  // for them server-side). Used to disable the dice + show a "rolling…"
-  // hint so the human doesn't tap and get an "It's not your turn" error.
-  const isBotTurn = !!currentPlayer?.isBot && !isGameOver;
-  // True if it's the local human's turn. False during opponent / bot turns.
-  const isMyTurn =
     !isGameOver &&
     !!myUserId &&
     !!currentPlayer &&
     currentPlayer.userId === myUserId;
 
-  const handleRoll = useCallback(
-    async (roll: number) => {
-      // Debounce: check both React state AND a synchronous ref so rapid taps
-      // can't slip through and double-roll.
-      if (isResolving || isResolvingRef.current || isGameOver) return;
-      isResolvingRef.current = true;
-      setIsResolving(true);
-      setLastRollValue(roll);
 
-      const player = game.players[game.currentPlayerIndex];
-      const rawNewPos = player.position + roll;
-      const didOvershoot = rawNewPos > 100;
-
-      const landingTile = didOvershoot
-        ? player.position
-        : Math.min(rawNewPos, 100);
-      const fromPos = player.position;
-      const tilesToStep = landingTile - fromPos;
-
-      // Sound effects
-      if (didOvershoot) {
-        soundManager.play("overshoot");
-      }
-
-      if (!didOvershoot && rawNewPos <= 100 && tilesToStep > 0) {
-        const snakeTail = getSnakeTail(boardMode, rawNewPos);
-        const ladderTop = getLadderTop(boardMode, rawNewPos);
-        if (snakeTail) {
-          setTimeout(
-            () => soundManager.play("snake_bite"),
-            tilesToStep * TILE_STEP_DELAY + 200,
-          );
-        } else if (ladderTop) {
-          setTimeout(
-            () => soundManager.play("ladder_climb"),
-            tilesToStep * TILE_STEP_DELAY + 200,
-          );
-        }
-      }
-
-      if (game.status === "finished") {
-        setTimeout(() => soundManager.play("win_fanfare"), 800);
-      }
-
-      if (!didOvershoot && landingTile <= 100) {
-        setHighlightedTile(landingTile);
-        setTimeout(() => setHighlightedTile(null), 1200);
-      }
-
-      if (tilesToStep > 0 && !didOvershoot) {
-        let step = 1;
-        const stepInterval = setInterval(() => {
-          const steppedPos = fromPos + step;
-          setAnimatedPositions((prev) => ({
-            ...prev,
-            [player.userId]: steppedPos,
-          }));
-          soundManager.play("tile_step");
-          step++;
-
-          if (steppedPos >= landingTile) {
-            clearInterval(stepInterval);
-
-            const finalizeTimeout = setTimeout(() => {
-              setHighlightedTile(null);
-              isResolvingRef.current = false;
-              setIsResolving(false);
-              setAnimatedPositions({});
-            }, 500);
-            animTimeoutRef.current = finalizeTimeout;
-          }
-        }, TILE_STEP_DELAY);
-        animTimeoutRef.current = stepInterval;
-      } else {
-        const timeout = setTimeout(() => {
-          isResolvingRef.current = false;
-          setIsResolving(false);
-        }, 500);
-        animTimeoutRef.current = timeout;
-      }
-    },
-    [game, isResolving, isGameOver, boardMode],
-  );
-
-  // Server roll handler for DiceRoll
-  const handleServerRoll = useCallback(async () => {
-    if (!game?._id) return 0;
-    try {
-      const result = await rollDiceOnline({ gameId: game._id as any });
-      return result.roll;
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to roll dice",
-      );
-      throw err;
-    }
-  }, [game?._id, rollDiceOnline]);
 
   const handleLeave = async () => {
     if (!game?._id) {

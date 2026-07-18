@@ -496,6 +496,17 @@ export async function performGameRoll(
 
   await ctx.db.patch(game._id, update);
 
+  // If the turn advanced to a bot, schedule a ONE-TIME bot roll after 1.5s.
+  // This replaces the 1-second polling cron that burned the free quota.
+  if (finalState.status !== "game_over") {
+    const nextPlayer = finalState.players[finalState.currentPlayerIndex];
+    if (nextPlayer?.isBot) {
+      ctx.scheduler.runAfter(1500, internal.bots.rollForBot, {
+        gameId: game._id,
+      });
+    }
+  }
+
   return {
     roll,
     status: finalState.status,

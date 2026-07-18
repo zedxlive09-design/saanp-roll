@@ -1,5 +1,6 @@
 import { internalMutation } from "./_generated/server";
 import { performGameRoll } from "./games";
+import { v } from "convex/values";
 
 // ---------------------------------------------------------------------------
 // Realistic bot name pool
@@ -261,3 +262,34 @@ export const autoAdvanceBotGames = internalMutation({
 
 // Exported for tests / debugging.
 export const __botNamePoolSize = BOT_NAMES.length;
+
+/**
+ * Roll the dice for the bot in a specific game. Called via scheduler.runAfter
+ * (one-time scheduled call) instead of the old 1-second polling cron.
+ *
+ * Only rolls if:
+ * - The game is still "playing"
+ * - The current player is still a bot
+ * - At least 1.5s has elapsed since the turn started (prevents instant rolls)
+ */
+export const rollForBot = internalMutation({
+  args: { gameId: v.id("games") },
+  handler: async (ctx, { gameId }) => {
+    const game = await ctx.db.get(gameId);
+    if (!game) return;
+    if (game.status !== "playing") return;
+
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (!currentPlayer?.isBot) return;
+
+    // Ensure enough time has passed (the scheduler handles this, but double-check)
+    const elapsed = Date.now() - (game.turnStartedAt ?? 0);
+    if (elapsed < 1000) return;
+
+    try {
+      await performGameRoll(ctx, game);
+    } catch (err) {
+      console.error(`[rollForBot] roll failed for game ${game._id}:`, err);
+    }
+  },
+});

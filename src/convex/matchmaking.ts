@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation, type MutationCtx } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -273,6 +274,12 @@ export const joinQueue = mutation({
       createdAt: Date.now(),
     });
 
+    // Schedule a bot fill after 30 seconds if no opponent is found by then.
+    // This replaces the old 10-second polling cron.
+    ctx.scheduler.runAfter(30_000, internal.matchmaking.fillQuickMatchBot, {
+      entryId: entryId as Id<"matchmaking">,
+    });
+
     return toPublic({
       _id: entryId,
       userId,
@@ -356,76 +363,76 @@ function pickBotName(): string {
  * for more than 30 seconds, create a game with a bot opponent and mark the
  * entry as "matched". This ensures solo players always get a game.
  */
-export const fillQuickMatchBots = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const now = Date.now();
-    const staleEntries = await ctx.db
-      .query("matchmaking")
-      .withIndex("by_status", (q) => q.eq("status", "searching"))
-      .filter((q) => q.lt(q.field("createdAt"), now - QM_BOT_DELAY_MS))
-      .take(20);
+export const fillQuickMatchBot = internalMutation({
+  args: { entryId: v.id("matchmaking") },
+  handler: async (ctx, { entryId }) => {
+    const entry = await ctx.db.get(entryId);
+    if (!entry) return;
+    if (entry.status !== "searching") return;
 
-    for (const entry of staleEntries) {
-      // Generate a unique room code
-      let roomCode = generateRoomCode();
-      let collision = await ctx.db
-        .query("games")
-        .withIndex("by_roomCode", (q) => q.eq("roomCode", roomCode))
-        .first();
-      while (collision) {
-        roomCode = generateRoomCode();
-        collision = await ctx.db
-          .query("games")
-          .withIndex("by_roomCode", (q) => q.eq("roomCode", roomCode))
-          .first();
-      }
+    // Only fill if 30s have actually elapsed
+    if (Date.now() - entry.createdAt < QM_BOT_DELAY_MS) return;
 
-      const botName = pickBotName();
-      const botId = `bot-${crypto.randomUUID()}`;
+    const entry_data = entry;
+  // Generate a unique room code
+  let roomCode = generateRoomCode();
+  let collision = await ctx.db
+    .query("games")
+    .withIndex("by_roomCode", (q) => q.eq("roomCode", roomCode))
+    .first();
+  while (collision) {
+    roomCode = generateRoomCode();
+    collision = await ctx.db
+      .query("games")
+      .withIndex("by_roomCode", (q) => q.eq("roomCode", roomCode))
+      .first();
+  }
 
-      const players = [
-        {
-          userId: entry.userId,
-          name: entry.name,
-          color: PLAYER_COLORS[0],
-          isConnected: true,
-          position: 0,
-          consecutiveSixes: 0,
-        },
-        {
-          userId: botId,
-          name: botName,
-          color: PLAYER_COLORS[1],
-          isConnected: true,
-          position: 0,
-          consecutiveSixes: 0,
-          isBot: true,
-        },
-      ];
+  const botName = pickBotName();
+  const botId = `bot-${crypto.randomUUID()}`;
 
-      const gameId = await ctx.db.insert("games", {
-        roomCode,
-        hostUserId: entry.userId,
-        boardId: entry.boardId,
-        status: "playing",
-        players,
-        currentPlayerIndex: 0,
-        turnPhase: "rolling",
-        winnerId: undefined,
-        lastRoll: undefined,
-        moveLog: [`Quick Match started: ${entry.name} vs ${botName} (bot)`],
-        turnStartedAt: Date.now(),
-        createdAt: Date.now(),
-      });
+  const players = [
+    {
+      userId: entry_data.userId,
+      name: entry_data.name,
+      color: PLAYER_COLORS[0],
+      isConnected: true,
+      position: 0,
+      consecutiveSixes: 0,
+    },
+    {
+      userId: botId,
+      name: botName,
+      color: PLAYER_COLORS[1],
+      isConnected: true,
+      position: 0,
+      consecutiveSixes: 0,
+      isBot: true,
+    },
+  ];
 
-      // Mark the queue entry as matched
-      await ctx.db.patch(entry._id, {
-        status: "matched",
-        gameId,
-        roomCode,
-        opponentName: botName,
-      });
-    }
+  const gameId = await ctx.db.insert("games", {
+    roomCode,
+    hostUserId: entry_data.userId,
+    boardId: entry_data.boardId,
+    status: "playing",
+    players,
+    currentPlayerIndex: 0,
+    turnPhase: "rolling",
+    winnerId: undefined,
+    lastRoll: undefined,
+    moveLog: [`Quick Match started: ${entry_data.name} vs ${botName} (bot)`],
+    turnStartedAt: Date.now(),
+    createdAt: Date.now(),
+  });
+
+  // Mark the queue entry as matched
+  await ctx.db.patch(entry_data._id, {
+    status: "matched",
+    gameId,
+    roomCode,
+    opponentName: botName,
+  });
+
   },
 });

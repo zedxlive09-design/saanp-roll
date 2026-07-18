@@ -1,30 +1,24 @@
 import { cronJobs } from "convex/server";
-import { internal } from "./_generated/api";
 
 /**
- * Scheduled cron jobs for online multiplayer:
+ * NO POLLING CRONS — all bot actions are scheduled via scheduler.runAfter().
  *
- * 1. `fill-bots` (every 10s): scans "waiting" games older than 30s and fills
- *    empty slots with AI bot players. Auto-starts the game once 2+ players
- *    are present. See `src/convex/bots.ts:checkAndFillBots`.
+ * Previously, autoAdvanceBotGames ran every 1 second (86,400 calls/day =
+ * 2.6M calls/month), which burned the entire Convex free quota.
  *
- * 2. `advance-bots` (every 1s): for each "playing" game where the current
- *    player is a bot and at least 1.5s has elapsed since the turn started,
- *    performs the bot's roll server-side via the SAME engine path
- *    (`performGameRoll`) used by human `rollDiceOnline` calls. See
- *    `src/convex/bots.ts:autoAdvanceBotGames`.
+ * Now:
+ * - Bot rolls: scheduled via ctx.scheduler.runAfter(1500, ...) in
+ *   performGameRoll, only when the turn actually advances to a bot.
+ * - Quick Match bot fill: scheduled via scheduler.runAfter(30000, ...) in
+ *   joinQueue, only when a player joins the queue and no opponent is found.
+ * - Friends mode bot fill: disabled (no bots in Friends rooms).
  *
- * Both are `internalMutation`s — not callable from the client.
+ * This reduces function calls from ~2.6M/month to ~0 (only actual game
+ * actions trigger function calls).
  */
+
 const crons = cronJobs();
 
-// Quick Match bot fallback: after 30s of searching, fill with a bot opponent.
-// Only affects matchmaking queue entries, NOT Friends rooms.
-crons.interval("fill-qm-bots", { seconds: 10 }, internal.matchmaking.fillQuickMatchBots);
-crons.interval(
-  "advance-bots",
-  { seconds: 1 },
-  internal.bots.autoAdvanceBotGames,
-);
+// No interval-based crons. All scheduling is event-driven.
 
 export default crons;
